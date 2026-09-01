@@ -23,6 +23,7 @@
         <!-- On ajoutera un <module>...</module> ici a chaque nouveau service cree -->
         <module>eureka-server</module>
         <module>config-server</module>
+        <module>api-gateway</module>
     </modules>
 
     <properties>

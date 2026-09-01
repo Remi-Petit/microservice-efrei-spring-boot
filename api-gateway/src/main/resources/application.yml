@@ -1,0 +1,15 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  config:
+    # Récupère la configuration depuis le serveur de configuration
+    # 'optional:' => démarre même si le config-server est indisponible
+    import: optional:configserver:http://localhost:8888
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
