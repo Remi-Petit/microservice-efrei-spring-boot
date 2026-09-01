@@ -1,0 +1,10 @@
+@gatewayUrl = http://localhost:8080
+
+### Sante de la gateway
+GET {{gatewayUrl}}/actuator/health
+
+### Liste des routes actives (endpoint actuator "gateway")
+GET {{gatewayUrl}}/actuator/gateway/routes
+
+### Appel du catalogue produits (product-service n'existe pas encore !)
+GET {{gatewayUrl}}/api/products
