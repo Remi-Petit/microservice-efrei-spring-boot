@@ -1,0 +1,10 @@
+@configUrl = http://localhost:8888
+
+### Configuration effective de product-service
+GET {{configUrl}}/product-service/default
+
+### Configuration effective de order-service
+GET {{configUrl}}/order-service/default
+
+### Sante du config-server
+GET {{configUrl}}/actuator/health
