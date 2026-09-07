@@ -30,6 +30,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -127,5 +129,33 @@ class OrderServiceTest {
         OrderResponse result = orderService.updateStatus(1L, new OrderStatusUpdateRequest(OrderStatus.CONFIRMED));
 
         assertThat(result.status()).isEqualTo(OrderStatus.CONFIRMED);
+    }
+
+    @Test
+    void findAll_retourneToutesLesCommandes() {
+        when(orderRepository.findAll()).thenReturn(
+                List.of(new Order("Alice", java.time.Instant.now(), OrderStatus.CREATED, new BigDecimal("159.80")))
+        );
+
+        assertThat(orderService.findAll()).hasSize(1);
+    }
+
+    @Test
+    void delete_commandeExistante_laSupprime() {
+        when(orderRepository.existsById(1L)).thenReturn(true);
+
+        orderService.delete(1L);
+
+        verify(orderRepository).deleteById(1L);
+    }
+
+    @Test
+    void delete_commandeInexistante_leveOrderNotFoundException() {
+        when(orderRepository.existsById(7L)).thenReturn(false);
+
+        assertThatThrownBy(() -> orderService.delete(7L))
+                .isInstanceOf(OrderNotFoundException.class);
+
+        verify(orderRepository, never()).deleteById(any(Long.class));
     }
 }

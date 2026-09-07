@@ -6,6 +6,7 @@ import com.formation.order.dto.OrderItemRequest;
 import com.formation.order.dto.OrderRequest;
 import com.formation.order.dto.OrderStatusUpdateRequest;
 import com.formation.order.dto.ProductDto;
+import com.formation.order.model.Order;
 import com.formation.order.model.OrderStatus;
 import com.formation.order.repository.OrderRepository;
 import feign.FeignException;
@@ -25,6 +26,7 @@ import java.util.List;
 
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -103,5 +105,28 @@ class OrderControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void listeToutesLesCommandes_retourneLaListe() throws Exception {
+        orderRepository.save(new Order("Alice", java.time.Instant.now(), OrderStatus.CREATED, new BigDecimal("159.80")));
+        orderRepository.save(new Order("Bob", java.time.Instant.now(), OrderStatus.CONFIRMED, new BigDecimal("79.90")));
+
+        mockMvc.perform(get("/api/orders"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].customerName").value("Alice"))
+                .andExpect(jsonPath("$[1].customerName").value("Bob"));
+    }
+
+    @Test
+    void supprimer_commandeExistante_retourne204() throws Exception {
+        Order saved = orderRepository.save(new Order("Alice", java.time.Instant.now(), OrderStatus.CREATED, new BigDecimal("79.90")));
+
+        mockMvc.perform(delete("/api/orders/{id}", saved.getId()))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/orders/{id}", saved.getId()))
+                .andExpect(status().isNotFound());
     }
 }

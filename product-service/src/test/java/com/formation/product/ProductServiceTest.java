@@ -18,6 +18,8 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -77,5 +79,42 @@ class ProductServiceTest {
 
         assertThatThrownBy(() -> productService.delete(7L))
                 .isInstanceOf(ProductNotFoundException.class);
+    }
+
+    @Test
+    void update_produitExistant_modifieEtEnregistre() {
+        Product existing = new Product("Souris", "Souris optique", new BigDecimal("19.90"), 25);
+        existing.setId(1L);
+        when(productRepository.findById(1L)).thenReturn(Optional.of(existing));
+        when(productRepository.save(any(Product.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        ProductRequest request = new ProductRequest("Souris Pro", "Souris optique sans fil", new BigDecimal("24.90"), 30);
+
+        ProductResponse result = productService.update(1L, request);
+
+        assertThat(result.id()).isEqualTo(1L);
+        assertThat(result.name()).isEqualTo("Souris Pro");
+        assertThat(result.description()).isEqualTo("Souris optique sans fil");
+        assertThat(result.price()).isEqualByComparingTo("24.90");
+        assertThat(result.quantity()).isEqualTo(30);
+    }
+
+    @Test
+    void delete_produitExistant_supprimeLeProduit() {
+        when(productRepository.existsById(1L)).thenReturn(true);
+
+        productService.delete(1L);
+
+        verify(productRepository).deleteById(1L);
+    }
+
+    @Test
+    void delete_produitInexistant_neSupprimePas() {
+        when(productRepository.existsById(7L)).thenReturn(false);
+
+        assertThatThrownBy(() -> productService.delete(7L))
+                .isInstanceOf(ProductNotFoundException.class);
+
+        verify(productRepository, never()).deleteById(any(Long.class));
     }
 }
