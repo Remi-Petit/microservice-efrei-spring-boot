@@ -75,6 +75,25 @@ Résultat attendu : `BUILD SUCCESS` (tous les tests passent).
 > chaque module. Ils utilisent une base H2 dédiée et `@MockBean ProductClient` pour isoler
 > `order-service` de `product-service`.
 
+### 1.b) Couverture de tests (JaCoCo)
+
+Le plugin **JaCoCo** est déclaré dans le `pom.xml` parent : il instrumente le code lors du
+`mvn test` et génère automatiquement un rapport de couverture pour **chaque module**.
+
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64   # ou tout JDK >= 17
+mvn test                                              # tests + génération rapport coverage
+```
+
+Rapports HTML générés (à ouvrir dans un navigateur) :
+
+- `product-service/target/site/jacoco/index.html`
+- `order-service/target/site/jacoco/index.html`
+
+Le rapport présente la couverture par **instruction / branche / ligne / méthode**, classe par
+classe (vert = couvert, rouge = non couvert). C'est l'outil idéal pour repérer les endpoints
+ou branches de code qui restent à tester.
+
 ### 2) Lancer les services (sans Docker)
 
 Depuis la racine, un terminal par service :
