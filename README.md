@@ -79,9 +79,9 @@ Dans le projet guidé, `order-service` ne faisait que **lire** chez `product-ser
 
 ### Points clés de l'implémentation
 
-1. **Endpoints d'écriture internes** : `POST /api/books/{id}/borrow` et
-   `POST /api/books/{id}/return` sont appelés **par `loan-service` via Feign** et
-   non par un client externe (situation fréquente en microservices).
+1. **Endpoints d'écriture internes** : `PATCH /api/books/{id}/decrement-stock` et
+   `PATCH /api/books/{id}/increment-stock` sont appelés **par `loan-service` via
+   Feign** et non par un client externe (situation fréquente en microservices).
 2. **Règle métier bloquante** : refuser un emprunt si aucun exemplaire n'est
    disponible → **`409 Conflict`** (nouveau code HTTP par rapport au projet guidé,
    qui n'utilisait que 400/404/502).

@@ -8,3 +8,66 @@ GET {{gatewayUrl}}/actuator/gateway/routes
 
 ### Appel du catalogue produits (product-service n'existe pas encore !)
 GET {{gatewayUrl}}/api/products
+
+
+###############################################################################
+# BOOK-SERVICE (via la gateway)
+###############################################################################
+
+### 1. Création d'un livre — availableCopies est initialisé à totalCopies
+# @name creerLivre
+POST {{gatewayUrl}}/api/books
+Content-Type: application/json
+
+{
+  "isbn": "978-2-07-000001-1",
+  "title": "1984",
+  "author": "George Orwell",
+  "totalCopies": 1
+}
+
+
+### 2. Lister tous les livres
+GET {{gatewayUrl}}/api/books
+
+
+### 3. Récupérer le livre créé
+GET {{gatewayUrl}}/api/books/{{creerLivre.response.body.$.id}}
+
+
+###############################################################################
+# LOAN-SERVICE (via la gateway)
+###############################################################################
+
+### 4. Création d'un emprunt RÉUSSI (décrémente le stock de 1)
+# @name creerEmprunt
+POST {{gatewayUrl}}/api/loans
+Content-Type: application/json
+
+{
+  "bookId": {{creerLivre.response.body.$.id}},
+  "memberName": "Bob"
+}
+
+
+### 5. Récupérer l'emprunt créé
+GET {{gatewayUrl}}/api/loans/{{creerEmprunt.response.body.$.id}}
+
+
+### 6. Création d'un emprunt REFUSÉ — stock épuisé (bookId déjà emprunté, totalCopies = 1)
+# Le livre n'a plus d'exemplaire disponible (availableCopies == 0) -> 409 Conflict
+POST {{gatewayUrl}}/api/loans
+Content-Type: application/json
+
+{
+  "bookId": {{creerLivre.response.body.$.id}},
+  "memberName": "Alice"
+}
+
+
+### 7. Retour d'un emprunt (réincrémente le stock de 1)
+PATCH {{gatewayUrl}}/api/loans/{{creerEmprunt.response.body.$.id}}/return
+
+
+### 8. Tentative de rendre DEUX FOIS le même emprunt (déjà rendu) -> 409 Conflict
+PATCH {{gatewayUrl}}/api/loans/{{creerEmprunt.response.body.$.id}}/return

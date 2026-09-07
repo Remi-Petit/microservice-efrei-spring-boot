@@ -2,7 +2,6 @@ package com.formation.loan;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.formation.loan.client.BookClient;
-import com.formation.loan.client.BookClient;
 import com.formation.loan.dto.BookDto;
 import com.formation.loan.dto.LoanRequest;
 import com.formation.loan.model.Loan;
