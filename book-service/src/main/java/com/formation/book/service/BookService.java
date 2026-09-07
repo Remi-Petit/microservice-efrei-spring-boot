@@ -3,14 +3,20 @@ package com.formation.book.service;
 import com.formation.book.dto.BookRequest;
 import com.formation.book.dto.BookResponse;
 import com.formation.book.exception.BookNotFoundException;
+import com.formation.book.exception.DuplicateIsbnException;
 import com.formation.book.exception.InsufficientCopiesException;
 import com.formation.book.exception.TooManyCopiesException;
 import com.formation.book.mapper.BookMapper;
 import com.formation.book.model.Book;
 import com.formation.book.repository.BookRepository;
+import jakarta.persistence.criteria.Predicate;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -22,10 +28,28 @@ public class BookService {
         this.bookRepository = bookRepository;
     }
 
-    public List<BookResponse> findAll() {
-        return bookRepository.findAll().stream()
-                .map(BookMapper::toResponse)
-                .toList();
+    /**
+     * Liste paginee et filtrable des livres.
+     * Bonus : filtre par auteur et/ou titre (insensible a la casse) + pagination.
+     */
+    public Page<BookResponse> findAll(String author, String title, Pageable pageable) {
+        return bookRepository.findAll(buildSpecification(author, title), pageable)
+                .map(BookMapper::toResponse);
+    }
+
+    private Specification<Book> buildSpecification(String author, String title) {
+        return (root, query, cb) -> {
+            List<Predicate> predicates = new ArrayList<>();
+            if (author != null && !author.isBlank()) {
+                predicates.add(cb.like(cb.lower(root.get("author")), "%" + author.toLowerCase() + "%"));
+            }
+            if (title != null && !title.isBlank()) {
+                predicates.add(cb.like(cb.lower(root.get("title")), "%" + title.toLowerCase() + "%"));
+            }
+            return predicates.isEmpty()
+                    ? cb.conjunction()
+                    : cb.and(predicates.toArray(new Predicate[0]));
+        };
     }
 
     public BookResponse findById(Long id) {
@@ -34,6 +58,9 @@ public class BookService {
 
     @Transactional
     public BookResponse create(BookRequest request) {
+        if (bookRepository.existsByIsbn(request.isbn())) {
+            throw new DuplicateIsbnException(request.isbn());
+        }
         Book saved = bookRepository.save(BookMapper.toEntity(request));
         return BookMapper.toResponse(saved);
     }
@@ -41,6 +68,12 @@ public class BookService {
     @Transactional
     public BookResponse update(Long id, BookRequest request) {
         Book book = findBook(id);
+        // ISBN unique : on autorise le meme isbn uniquement pour le livre lui-meme.
+        bookRepository.findByIsbn(request.isbn())
+                .filter(other -> !other.getId().equals(id))
+                .ifPresent(other -> {
+                    throw new DuplicateIsbnException(request.isbn());
+                });
         book.setIsbn(request.isbn());
         book.setTitle(request.title());
         book.setAuthor(request.author());

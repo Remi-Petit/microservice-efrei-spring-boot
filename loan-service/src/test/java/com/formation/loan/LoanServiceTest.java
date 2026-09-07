@@ -4,6 +4,7 @@ import com.formation.loan.client.BookClient;
 import com.formation.loan.dto.BookDto;
 import com.formation.loan.dto.LoanRequest;
 import com.formation.loan.dto.LoanResponse;
+import com.formation.loan.exception.ActiveLoanLimitExceededException;
 import com.formation.loan.exception.BookNotFoundForLoanException;
 import com.formation.loan.exception.BookServiceUnavailableException;
 import com.formation.loan.exception.InsufficientCopiesForLoanException;
@@ -184,5 +185,17 @@ class LoanServiceTest {
 
         assertThatThrownBy(() -> loanService.findById(7L))
                 .isInstanceOf(LoanNotFoundException.class);
+    }
+
+    @Test
+    void create_membreALaLimiteDe3EmpruntsActifs_leveActiveLoanLimitExceeded() {
+        when(loanRepository.countByMemberNameAndStatus("Bob", LoanStatus.ACTIVE)).thenReturn(3L);
+
+        assertThatThrownBy(() -> loanService.create(new LoanRequest(1L, "Bob")))
+                .isInstanceOf(ActiveLoanLimitExceededException.class);
+
+        // La limite est verifiee AVANT tout appel Feign : aucune lecture/ecriture inutile.
+        verify(bookClient, never()).getBookById(any(Long.class));
+        verify(bookClient, never()).decrementStock(any(Long.class));
     }
 }

@@ -104,7 +104,7 @@ Dans le projet guidé, `order-service` ne faisait que **lire** chez `product-ser
 
 | Méthode | Endpoint | Rôle |
 |---------|----------|------|
-| `GET` | `/api/books` | Liste les livres |
+| `GET` | `/api/books` | Liste les livres (filtres `?author=`, `?title=` + pagination `?page=&size=`) |
 | `GET` | `/api/books/{id}` | Récupère un livre |
 | `POST` | `/api/books` | Ajoute un livre (`availableCopies = totalCopies`) |
 | `PUT` | `/api/books/{id}` | Modifie un livre |
@@ -148,6 +148,19 @@ Les erreurs sont renvoyées sous un corps uniforme `ApiError`
   `/api/loans/**` → `loan-service`.
 - Modules ajoutés au parent `pom.xml` ; `book-service/Dockerfile`,
   `loan-service/Dockerfile` ; services ajoutés à `docker-compose.yml`.
+
+### Bonus réalisés
+
+- **Recherche** : `GET /api/books?author=...` et `?title=...` (insensible à la
+  casse, via `JpaSpecificationExecutor`).
+- **Pagination** : `GET /api/books?page=0&size=10` renvoie une `Page<BookResponse>`
+  (`content`, `totalElements`, …).
+- **ISBN unique** : création/mise à jour avec un ISBN déjà utilisé → `409 Conflict`
+  (nouvelle exception `DuplicateIsbnException`).
+- **Limite d'emprunts** : un même `memberName` ne peut pas avoir plus de **3
+  emprunts `ACTIVE`** simultanés → `409 Conflict` (vérifié avant tout appel Feign).
+- **Docker** : `book-service` et `loan-service` conteneurisés (multi-stage),
+  intégrés à `docker-compose.yml`.
 
 ---
 

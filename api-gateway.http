@@ -71,3 +71,67 @@ PATCH {{gatewayUrl}}/api/loans/{{creerEmprunt.response.body.$.id}}/return
 
 ### 8. Tentative de rendre DEUX FOIS le même emprunt (déjà rendu) -> 409 Conflict
 PATCH {{gatewayUrl}}/api/loans/{{creerEmprunt.response.body.$.id}}/return
+
+
+###############################################################################
+# BONUS (recherche / pagination / limite de 3 emprunts actifs)
+###############################################################################
+
+### B1. Recherche par auteur + pagination
+GET {{gatewayUrl}}/api/books?author=Orwell&page=0&size=2
+
+### B2. Pagination simple (2 par page)
+GET {{gatewayUrl}}/api/books?page=0&size=2
+
+
+### B3. Création d'un livre avec assez d'exemplaires pour la limite (totalCopies = 3)
+# @name creerLivreBonus
+POST {{gatewayUrl}}/api/books
+Content-Type: application/json
+
+{
+  "isbn": "978-2-07-000003-5",
+  "title": "Le Comte de Monte-Cristo",
+  "author": "Alexandre Dumas",
+  "totalCopies": 3
+}
+
+
+### B4. Premier emprunt de Carol
+POST {{gatewayUrl}}/api/loans
+Content-Type: application/json
+
+{
+  "bookId": {{creerLivreBonus.response.body.$.id}},
+  "memberName": "Carol"
+}
+
+
+### B5. Deuxième emprunt de Carol
+POST {{gatewayUrl}}/api/loans
+Content-Type: application/json
+
+{
+  "bookId": {{creerLivreBonus.response.body.$.id}},
+  "memberName": "Carol"
+}
+
+
+### B6. Troisième emprunt de Carol
+POST {{gatewayUrl}}/api/loans
+Content-Type: application/json
+
+{
+  "bookId": {{creerLivreBonus.response.body.$.id}},
+  "memberName": "Carol"
+}
+
+
+### B7. Quatrième emprunt de Carol -> 409 (limite de 3 emprunts ACTIVE atteinte)
+POST {{gatewayUrl}}/api/loans
+Content-Type: application/json
+
+{
+  "bookId": {{creerLivreBonus.response.body.$.id}},
+  "memberName": "Carol"
+}

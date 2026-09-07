@@ -144,4 +144,17 @@ class LoanControllerIntegrationTest {
         mockMvc.perform(patch("/api/loans/{id}/return", saved.getId()))
                 .andExpect(status().isConflict());
     }
+
+    @Test
+    void create_membreALaLimiteDe3EmpruntsActifs_retourne409() throws Exception {
+        for (int i = 0; i < 3; i++) {
+            loanRepository.save(new Loan("Bob", 100L + i, "Livre " + i,
+                    java.time.LocalDate.now(), java.time.LocalDate.now().plusDays(14), LoanStatus.ACTIVE));
+        }
+
+        mockMvc.perform(post("/api/loans")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new LoanRequest(1L, "Bob"))))
+                .andExpect(status().isConflict());
+    }
 }

@@ -14,6 +14,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -109,5 +116,30 @@ class BookServiceTest {
                 .isInstanceOf(BookNotFoundException.class);
 
         verify(bookRepository, never()).deleteById(any(Long.class));
+    }
+
+    @Test
+    void findAll_retournePageMappee() {
+        Book b = book("isbn", "Titre", "Auteur", 3, 3);
+        b.setId(1L);
+        when(bookRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(b)));
+
+        Page<BookResponse> result = bookService.findAll(null, null, PageRequest.of(0, 10));
+
+        assertThat(result.getTotalElements()).isEqualTo(1);
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).isbn()).isEqualTo("isbn");
+    }
+
+    @Test
+    void create_isbnDuplique_leveDuplicateIsbnException() {
+        when(bookRepository.existsByIsbn("isbn-dup")).thenReturn(true);
+        BookRequest request = new BookRequest("isbn-dup", "Titre", "Auteur", 2);
+
+        assertThatThrownBy(() -> bookService.create(request))
+                .isInstanceOf(com.formation.book.exception.DuplicateIsbnException.class);
+
+        verify(bookRepository, never()).save(any(Book.class));
     }
 }

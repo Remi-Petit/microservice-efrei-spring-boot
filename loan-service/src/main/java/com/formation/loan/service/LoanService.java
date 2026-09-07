@@ -4,6 +4,7 @@ import com.formation.loan.client.BookClient;
 import com.formation.loan.dto.BookDto;
 import com.formation.loan.dto.LoanRequest;
 import com.formation.loan.dto.LoanResponse;
+import com.formation.loan.exception.ActiveLoanLimitExceededException;
 import com.formation.loan.exception.BookNotFoundForLoanException;
 import com.formation.loan.exception.BookServiceUnavailableException;
 import com.formation.loan.exception.InsufficientCopiesForLoanException;
@@ -52,6 +53,11 @@ public class LoanService {
     @Transactional
     public LoanResponse create(LoanRequest request) {
         Long bookId = request.bookId();
+
+        // ---- Etape 0 : limite de 3 emprunts ACTIVE simultanes par membre (bonus) ----
+        if (loanRepository.countByMemberNameAndStatus(request.memberName(), LoanStatus.ACTIVE) >= 3) {
+            throw new ActiveLoanLimitExceededException(request.memberName());
+        }
 
         // ---- Etape 1 : LECTURE et verification prealable (le "check") ----
         BookDto book = fetchBook(bookId);

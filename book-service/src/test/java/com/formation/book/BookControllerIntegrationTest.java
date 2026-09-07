@@ -102,4 +102,49 @@ class BookControllerIntegrationTest {
         mockMvc.perform(get("/api/books/{id}", book.getId()))
                 .andExpect(status().isNotFound());
     }
+
+    @Test
+    void getAll_filtreParAuteur_insensibleACasse() throws Exception {
+        bookRepository.save(new Book("isbn-1", "Titre 1", "Camus", 3, 3));
+        bookRepository.save(new Book("isbn-2", "Titre 2", "Hugo", 2, 2));
+
+        mockMvc.perform(get("/api/books").param("author", "camus"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].author").value("Camus"));
+    }
+
+    @Test
+    void getAll_filtreParTitre() throws Exception {
+        bookRepository.save(new Book("isbn-1", "La Peste", "Camus", 3, 3));
+        bookRepository.save(new Book("isbn-2", "Les Miserables", "Hugo", 2, 2));
+
+        mockMvc.perform(get("/api/books").param("title", "misera"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].title").value("Les Miserables"));
+    }
+
+    @Test
+    void getAll_pagination() throws Exception {
+        bookRepository.save(new Book("isbn-1", "Titre 1", "Auteur 1", 1, 1));
+        bookRepository.save(new Book("isbn-2", "Titre 2", "Auteur 2", 1, 1));
+        bookRepository.save(new Book("isbn-3", "Titre 3", "Auteur 3", 1, 1));
+
+        mockMvc.perform(get("/api/books").param("size", "2").param("page", "0"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(2))
+                .andExpect(jsonPath("$.totalElements").value(3));
+    }
+
+    @Test
+    void create_isbnDuplique_retourne409() throws Exception {
+        bookRepository.save(new Book("isbn-dup", "Titre 1", "Auteur", 1, 1));
+        BookRequest duplicate = new BookRequest("isbn-dup", "Titre 2", "Auteur 2", 2);
+
+        mockMvc.perform(post("/api/books")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(duplicate)))
+                .andExpect(status().isConflict());
+    }
 }

@@ -22,7 +22,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(build(HttpStatus.NOT_FOUND, ex.getMessage()));
     }
 
-    @ExceptionHandler({InsufficientCopiesException.class, TooManyCopiesException.class})
+    @ExceptionHandler({InsufficientCopiesException.class, TooManyCopiesException.class, DuplicateIsbnException.class})
     public ResponseEntity<ApiError> handleConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(build(HttpStatus.CONFLICT, ex.getMessage()));
     }

@@ -32,7 +32,7 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(build(HttpStatus.BAD_GATEWAY, ex.getMessage()));
     }
 
-    @ExceptionHandler({InsufficientCopiesForLoanException.class, LoanAlreadyReturnedException.class})
+    @ExceptionHandler({InsufficientCopiesForLoanException.class, LoanAlreadyReturnedException.class, ActiveLoanLimitExceededException.class})
     public ResponseEntity<ApiError> handleConflict(RuntimeException ex) {
         return ResponseEntity.status(HttpStatus.CONFLICT).body(build(HttpStatus.CONFLICT, ex.getMessage()));
     }
