@@ -88,6 +88,46 @@ services:
         condition: service_healthy
     networks: [microservice-net]
 
+  book-service:
+    build:
+      context: .
+      dockerfile: book-service/Dockerfile
+    ports:
+      - "8091:8091"
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8761/eureka/"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8091/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [microservice-net]
+
+  loan-service:
+    build:
+      context: .
+      dockerfile: loan-service/Dockerfile
+    ports:
+      - "8092:8092"
+    environment:
+      SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
+      EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8761/eureka/"
+    depends_on:
+      config-server:
+        condition: service_healthy
+      eureka-server:
+        condition: service_healthy
+      book-service:
+        condition: service_healthy
+    networks: [microservice-net]
+
 networks:
   microservice-net:
     driver: bridge

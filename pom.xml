@@ -26,6 +26,8 @@
         <module>api-gateway</module>
         <module>product-service</module>
         <module>order-service</module>
+        <module>book-service</module>
+        <module>loan-service</module>
     </modules>
 
     <properties>

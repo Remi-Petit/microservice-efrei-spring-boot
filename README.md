@@ -16,8 +16,12 @@ Projet pédagogique d'architecture microservices avec **Spring Boot 3** et **Spr
        │
        ▼
 ┌──────────────┐      ┌───────────────┐
-│ product-svc  │◀────▶│  order-service │ (via OpenFeign)
+│ product-svc  │◀────▶│ order-service │ (via OpenFeign)
 │     :8081    │      │     :8082      │
+└──────────────┘      └───────────────┘
+┌──────────────┐      ┌───────────────┐
+│  book-svc    │◀────▶│  loan-service │ (lecture + écriture via Feign)
+│     :8091    │      │     :8092      │
 └──────────────┘      └───────────────┘
 ```
 
@@ -30,6 +34,8 @@ Projet pédagogique d'architecture microservices avec **Spring Boot 3** et **Spr
 | `api-gateway`   | 8080  | Point d'entrée unique + routage + load-balancing |
 | `product-service`| 8081 | Catalogue de produits (JPA + H2)                |
 | `order-service` | 8082  | Commandes (consomme `product-service` via Feign) |
+| `book-service`  | 8091  | Catalogue de livres (JPA + H2 `bookdb`)         |
+| `loan-service`  | 8092  | Emprunts (lit **et** écrit** chez `book-service` via Feign) |
 
 ---
 
@@ -54,6 +60,64 @@ Fichiers ajoutés :
 - **Priorité de config** : variables d'environnement > config-server > valeurs locales.
   `EUREKA_CLIENT_SERVICEURL_DEFAULTZONE` dans `docker-compose.yml` écrase la valeur
   `localhost` de `config-repo/application.yml`.
+
+---
+
+## Étape 10 — 🎓 Exercice final : système de gestion de bibliothèque
+
+Deux nouveaux microservices métier **`book-service`** (catalogue de livres) et
+**`loan-service`** (emprunts), en réutilisant `eureka-server`, `config-server`,
+`api-gateway` déjà construits.
+
+### Ce qui change par rapport au projet guidé
+
+Dans le projet guidé, `order-service` ne faisait que **lire** chez `product-service`
+(`GET`), jamais modifier. Ici, `loan-service` **lit et écrit** chez `book-service` :
+
+- créer un emprunt → **décrémente** le nombre d'exemplaires disponibles ;
+- rendre un emprunt → **réincrémente** le nombre d'exemplaires disponibles.
+
+### Points clés de l'implémentation
+
+1. **Endpoints d'écriture internes** : `POST /api/books/{id}/borrow` et
+   `POST /api/books/{id}/return` sont appelés **par `loan-service` via Feign** et
+   non par un client externe (situation fréquente en microservices).
+2. **Règle métier bloquante** : refuser un emprunt si aucun exemplaire n'est
+   disponible → **`409 Conflict`** (nouveau code HTTP par rapport au projet guidé,
+   qui n'utilisait que 400/404/502).
+3. **Défense en profondeur (2 niveaux)** — on ne fait jamais confiance à un
+   appelant, même interne :
+   - `loan-service` vérifie la disponibilité **avant** d'appeler (`BookService.create`) ;
+   - `book-service` **revérifie** avant de décrémenter son propre stock (`BookService.borrow`).
+
+### API
+
+| Méthode | Endpoint | Rôle |
+|---------|----------|------|
+| `GET` | `/api/books` | Liste les livres |
+| `GET` | `/api/books/{id}` | Récupère un livre |
+| `POST` | `/api/books` | Ajoute un livre |
+| `PUT` | `/api/books/{id}` | Modifie un livre |
+| `DELETE` | `/api/books/{id}` | Supprime un livre |
+| `POST` | `/api/books/{id}/borrow` | (interne) décrémente le stock — `409` si aucun exemplaire |
+| `POST` | `/api/books/{id}/return` | (interne) réincrémente le stock |
+| `GET` | `/api/loans` | Liste les emprunts |
+| `GET` | `/api/loans/{id}` | Récupère un emprunt |
+| `POST` | `/api/loans` | Crée un emprunt (décrémente le stock) — `409` si aucun exemplaire |
+| `POST` | `/api/loans/{id}/return` | Rend un emprunt (réincrémente le stock) |
+| `DELETE` | `/api/loans/{id}` | Supprime un emprunt |
+
+### Construit dans cette étape
+
+- `book-service/` et `loan-service/` (sources + `pom.xml`) + leurs tests
+  (`BookServiceTest`, `BookControllerIntegrationTest`, `LoanServiceTest`,
+  `LoanControllerIntegrationTest`).
+- `config-repo/book-service.yml` et `config-repo/loan-service.yml` (+ copies dans
+  `config-server/config-repo/`) : ports `8091` / `8092`, bases H2 `bookdb` / `loandb`.
+- 2 nouvelles routes dans `api-gateway.yml` : `/api/books/**` → `book-service`,
+  `/api/loans/**` → `loan-service`.
+- Modules ajoutés au parent `pom.xml` ; `book-service/Dockerfile`,
+  `loan-service/Dockerfile` ; services ajoutés à `docker-compose.yml`.
 
 ---
 
@@ -89,6 +153,8 @@ Rapports HTML générés (à ouvrir dans un navigateur) :
 
 - `product-service/target/site/jacoco/index.html`
 - `order-service/target/site/jacoco/index.html`
+- `book-service/target/site/jacoco/index.html`
+- `loan-service/target/site/jacoco/index.html`
 
 Le rapport présente la couverture par **instruction / branche / ligne / méthode**, classe par
 classe (vert = couvert, rouge = non couvert). C'est l'outil idéal pour repérer les endpoints
@@ -104,10 +170,12 @@ mvn -pl config-server spring-boot:run
 mvn -pl api-gateway   spring-boot:run
 mvn -pl product-service spring-boot:run
 mvn -pl order-service  spring-boot:run
+mvn -pl book-service   spring-boot:run
+mvn -pl loan-service   spring-boot:run
 ```
 
 Ordre de démarrage conseillé : `eureka-server` → `config-server` → `api-gateway` →
-`product-service` → `order-service`.
+`product-service` → `order-service` → `book-service` → `loan-service`.
 
 ### 3) Lancer via Docker Compose
 
@@ -142,12 +210,26 @@ curl -X POST http://localhost:8080/api/orders \
 curl -X PATCH http://localhost:8080/api/orders/1/status \
   -H "Content-Type: application/json" \
   -d '{"status":"CONFIRMED"}'
+
+# Livres
+curl http://localhost:8080/api/books                  # GET all
+curl http://localhost:8080/api/books/1                # GET one
+
+# Emprunter un livre (décrémente le stock)
+curl -X POST http://localhost:8080/api/loans \
+  -H "Content-Type: application/json" \
+  -d '{"bookId":1,"borrowerName":"Alice"}'
+
+# Rendre un livre (réincrémente le stock)
+curl -X POST http://localhost:8080/api/loans/1/return
 ```
 
 ### 5) Swagger / OpenAPI
 
 - `product-service` : `http://localhost:8081/swagger-ui.html`
 - `order-service` : `http://localhost:8082/swagger-ui.html`
+- `book-service` : `http://localhost:8091/swagger-ui.html`
+- `loan-service` : `http://localhost:8092/swagger-ui.html`
 
 ---
 
