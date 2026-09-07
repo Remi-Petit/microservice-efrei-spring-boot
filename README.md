@@ -22,19 +22,39 @@ chez `book-service` (décrémenter / réincrémenter le stock), ce qui introduit
 
 ## 2. Architecture
 
+L'infrastructure existante (`eureka-server`, `config-server`, `api-gateway`) a été
+réutilisée ; deux services métier ont été ajoutés (`book-service`, `loan-service`).
+
 ```
-api-gateway (:8080)
-   │
-   ├──▶ eureka-server (:8761)      ──(annuaire / découverte)
-   ├──▶ config-server (:8888)      ──(config centralisée → config-repo/)
-   │
-   └──▶ book-service (:8091)  ◀──▶ loan-service (:8092)   (lecture + écriture via Feign)
+┌──────────────┐     ┌───────────────┐     ┌──────────────────┐
+│  api-gateway │────▶│ config-server │◀────│   config-repo/   │
+│    :8080     │     │      :8888    │     │   (*.yml)        │
+└──────┬───────┘     └──────┬────────┘     └──────────────────┘
+       │                    │ (sert la config)
+       ▼                    ▼
+   eureka-server ←─────────┴── (annuaire / découverte)
+       :8761
+       │
+       ▼
+┌──────────────┐  ──Feign GET────▶  ┌───────────────┐
+│ order-service│                   │ product-svc   │
+│     :8082    │                   │    :8081      │
+└──────────────┘                   └───────────────┘
+┌──────────────┐ ─Feign LECTURE+ÉCRITURE▶ ┌───────────────┐
+│ loan-service │                          │ book-service  │
+│     :8092    │                          │    :8091      │
+└──────────────┘                          └───────────────┘
 ```
 
-| Service         | Port  | Rôle                                                                 |
-|-----------------|-------|----------------------------------------------------------------------|
-| `book-service`  | 8091  | Catalogue de livres (JPA + H2 `bookdb`)                              |
-| `loan-service`  | 8092  | Emprunts (JPA + H2 `loandb`), appelle `book-service` via OpenFeign   |
+| Service          | Port  | Rôle                                                              |
+|------------------|-------|-------------------------------------------------------------------|
+| `eureka-server`  | 8761  | Service discovery / annuaire                                       |
+| `config-server`  | 8888  | Configuration centralisée (profil `native`)                        |
+| `api-gateway`    | 8080  | Point d'entrée unique + routage + load-balancing                   |
+| `product-service`| 8081  | Catalogue de produits (JPA + H2)                                   |
+| `order-service`  | 8082  | Commandes — consulte `product-service` via Feign (GET)             |
+| `book-service`   | 8091  | Catalogue de livres (JPA + H2 `bookdb`)                            |
+| `loan-service`   | 8092  | Emprunts (JPA + H2 `loandb`) — appelle `book-service` en lecture **et** écriture via Feign |
 
 ---
 
