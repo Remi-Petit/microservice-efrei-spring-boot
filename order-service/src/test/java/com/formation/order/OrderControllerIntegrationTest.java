@@ -57,7 +57,7 @@ class OrderControllerIntegrationTest {
                 Request.HttpMethod.GET,
                 "/api/products/999",
                 new HashMap<>(),
-                null,
+                (byte[]) null,
                 null
         );
         return new FeignException.NotFound("Not Found", request, null, new HashMap<>());

@@ -58,7 +58,7 @@ class OrderServiceTest {
                 Request.HttpMethod.GET,
                 "/api/products/999",
                 new HashMap<>(),
-                null,
+                (byte[]) null,
                 null
         );
         return new FeignException.NotFound("Not Found", request, null, new HashMap<>());
@@ -69,7 +69,7 @@ class OrderServiceTest {
                 Request.HttpMethod.GET,
                 "/api/products/1",
                 new HashMap<>(),
-                null,
+                (byte[]) null,
                 null
         );
         return new FeignException.ServiceUnavailable("Service Unavailable", request, null, new HashMap<>());
