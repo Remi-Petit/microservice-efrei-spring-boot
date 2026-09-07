@@ -3,8 +3,8 @@ package com.formation.loan.client;
 import com.formation.loan.dto.BookDto;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
 
 /**
  * Contrat Feign vers book-service. Contrairement au projet guide (order-service ne
@@ -21,9 +21,10 @@ public interface BookClient {
     BookDto getBookById(@PathVariable("id") Long id);
 
     // ---- ECRITURE (appels internes de book-service) ----
-    @PostMapping("/api/books/{id}/borrow")
-    BookDto borrowBook(@PathVariable("id") Long id);
+    @PatchMapping("/api/books/{id}/decrement-stock")
+    BookDto decrementStock(@PathVariable("id") Long id);
 
-    @PostMapping("/api/books/{id}/return")
-    BookDto returnBook(@PathVariable("id") Long id);
+    @PatchMapping("/api/books/{id}/increment-stock")
+    BookDto incrementStock(@PathVariable("id") Long id);
 }
+

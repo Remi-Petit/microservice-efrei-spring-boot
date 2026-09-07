@@ -1,3 +1,9 @@
+logging:
+  level:
+    feign: DEBUG
+    org.springframework.cloud.loadbalancer: DEBUG
+    com.netflix.discovery: DEBUG
+
 server:
   port: 8092
 

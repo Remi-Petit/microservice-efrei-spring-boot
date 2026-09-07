@@ -119,6 +119,9 @@ services:
     environment:
       SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8761/eureka/"
+      LOGGING_LEVEL_FEIGN: DEBUG
+      LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_LOADBALANCER: DEBUG
+      LOGGING_LEVEL_COM_NETFIX_DISCOVERY: DEBUG
     depends_on:
       config-server:
         condition: service_healthy

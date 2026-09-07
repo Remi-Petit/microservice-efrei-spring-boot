@@ -14,8 +14,9 @@ public record BookRequest(
         @NotBlank(message = "L'auteur est obligatoire")
         String author,
 
-        @NotNull(message = "Le nombre d'exemplaires est obligatoire")
-        @Min(value = 0, message = "Le nombre d'exemplaires ne peut pas etre negatif")
-        Integer availableCopies
+        @NotNull(message = "Le nombre total d'exemplaires est obligatoire")
+        @Min(value = 1, message = "Le nombre total d'exemplaires doit etre au moins 1")
+        Integer totalCopies
 ) {
 }
+

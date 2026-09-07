@@ -7,7 +7,7 @@ public record LoanRequest(
         @NotNull(message = "L'identifiant du livre est obligatoire")
         Long bookId,
 
-        @NotBlank(message = "Le nom de l'emprunteur est obligatoire")
-        String borrowerName
+        @NotBlank(message = "Le nom du membre est obligatoire")
+        String memberName
 ) {
 }

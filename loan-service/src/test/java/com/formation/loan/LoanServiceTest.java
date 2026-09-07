@@ -21,6 +21,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.Optional;
 
@@ -65,8 +66,8 @@ class LoanServiceTest {
 
     private FeignException conflict() {
         Request request = Request.create(
-                Request.HttpMethod.POST,
-                "/api/books/1/borrow",
+                Request.HttpMethod.PATCH,
+                "/api/books/1/decrement-stock",
                 new HashMap<>(),
                 (byte[]) null,
                 null
@@ -88,7 +89,7 @@ class LoanServiceTest {
     @Test
     void create_livreDisponible_decrementeEtSauvegarde() {
         when(bookClient.getBookById(eq(1L))).thenReturn(book(1L, "Le Petit Prince", 3));
-        when(bookClient.borrowBook(1L)).thenReturn(book(1L, "Le Petit Prince", 2));
+        when(bookClient.decrementStock(1L)).thenReturn(book(1L, "Le Petit Prince", 2));
         when(loanRepository.save(any(Loan.class))).thenAnswer(invocation -> {
             Loan l = invocation.getArgument(0);
             return l;
@@ -97,9 +98,22 @@ class LoanServiceTest {
         LoanRequest request = new LoanRequest(1L, "Alice");
         LoanResponse result = loanService.create(request);
 
-        verify(bookClient).borrowBook(1L);
-        assertThat(result.status()).isEqualTo(LoanStatus.BORROWED);
-        assertThat(result.borrowerName()).isEqualTo("Alice");
+        verify(bookClient).decrementStock(1L);
+        assertThat(result.status()).isEqualTo(LoanStatus.ACTIVE);
+        assertThat(result.memberName()).isEqualTo("Alice");
+    }
+
+    @Test
+    void create_calculeDueDateAPlus14Jours() {
+        when(bookClient.getBookById(eq(1L))).thenReturn(book(1L, "Le Petit Prince", 3));
+        when(bookClient.decrementStock(1L)).thenReturn(book(1L, "Le Petit Prince", 2));
+        when(loanRepository.save(any(Loan.class))).thenAnswer(invocation -> invocation.getArgument(0));
+
+        LoanResponse result = loanService.create(new LoanRequest(1L, "Alice"));
+
+        LocalDate expectedDueDate = LocalDate.now().plusDays(14);
+        assertThat(result.loanDate()).isEqualTo(LocalDate.now());
+        assertThat(result.dueDate()).isEqualTo(expectedDueDate);
     }
 
     @Test
@@ -109,7 +123,7 @@ class LoanServiceTest {
         assertThatThrownBy(() -> loanService.create(new LoanRequest(1L, "Alice")))
                 .isInstanceOf(InsufficientCopiesForLoanException.class);
 
-        verify(bookClient, never()).borrowBook(any(Long.class));
+        verify(bookClient, never()).decrementStock(any(Long.class));
     }
 
     @Test
@@ -129,11 +143,11 @@ class LoanServiceTest {
     }
 
     @Test
-    void create_bookServiceRenvoie409_leveInsufficientCopies() {
-        // Defense en profondeur : meme si la lecture était OK, book-service peut
-        // retomber sur 409 au moment de decrémenter.
+    void create_casDeConcurrence_bookServiceRenvoie409_leveInsufficientCopies() {
+        // TOCTOU : meme si la lecture (etape 1) voit encore un exemplaire, un
+        // emprunt concurrent a pu epuiser le stock avant le decrement (etape 2).
         when(bookClient.getBookById(eq(1L))).thenReturn(book(1L, "Le Petit Prince", 1));
-        when(bookClient.borrowBook(1L)).thenThrow(conflict());
+        when(bookClient.decrementStock(1L)).thenThrow(conflict());
 
         assertThatThrownBy(() -> loanService.create(new LoanRequest(1L, "Alice")))
                 .isInstanceOf(InsufficientCopiesForLoanException.class);
@@ -141,21 +155,23 @@ class LoanServiceTest {
 
     @Test
     void giveBack_reincrementeEtMarqueRendu() {
-        Loan loan = new Loan(1L, "Le Petit Prince", "Alice", java.time.Instant.now(), LoanStatus.BORROWED);
+        Loan loan = new Loan("Alice", 1L, "Le Petit Prince",
+                LocalDate.now(), LocalDate.now().plusDays(14), LoanStatus.ACTIVE);
         when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
-        when(bookClient.returnBook(1L)).thenReturn(book(1L, "Le Petit Prince", 2));
+        when(bookClient.incrementStock(1L)).thenReturn(book(1L, "Le Petit Prince", 2));
         when(loanRepository.save(any(Loan.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
         loanService.giveBack(1L);
 
-        verify(bookClient).returnBook(1L);
+        verify(bookClient).incrementStock(1L);
         assertThat(loan.getStatus()).isEqualTo(LoanStatus.RETURNED);
-        assertThat(loan.getReturnDate()).isNotNull();
+        assertThat(loan.getReturnDate()).isEqualTo(LocalDate.now());
     }
 
     @Test
     void giveBack_dejaRendu_leveLoanAlreadyReturnedException() {
-        Loan loan = new Loan(1L, "Le Petit Prince", "Alice", java.time.Instant.now(), LoanStatus.RETURNED);
+        Loan loan = new Loan("Alice", 1L, "Le Petit Prince",
+                LocalDate.now(), LocalDate.now().plusDays(14), LoanStatus.RETURNED);
         when(loanRepository.findById(1L)).thenReturn(Optional.of(loan));
 
         assertThatThrownBy(() -> loanService.giveBack(1L))

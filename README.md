@@ -85,10 +85,20 @@ Dans le projet guidé, `order-service` ne faisait que **lire** chez `product-ser
 2. **Règle métier bloquante** : refuser un emprunt si aucun exemplaire n'est
    disponible → **`409 Conflict`** (nouveau code HTTP par rapport au projet guidé,
    qui n'utilisait que 400/404/502).
-3. **Défense en profondeur (2 niveaux)** — on ne fait jamais confiance à un
-   appelant, même interne :
-   - `loan-service` vérifie la disponibilité **avant** d'appeler (`BookService.create`) ;
-   - `book-service` **revérifie** avant de décrémenter son propre stock (`BookService.borrow`).
+3. **Problème TOCTOU (*Time-Of-Check to Time-Of-Use*)** : entre la vérification de
+   disponibilité (étape 1) et l'appel de décrément (étape 2), un **emprunt
+   concurrent** peut avoir consommé le dernier exemplaire. C'est pourquoi
+   `book-service` **revérifie** la condition au moment de décrémenter (défense en
+   profondeur), plutôt que de faire confiance à la vérification déjà faite par
+   `loan-service`.
+
+### Modèle
+
+- **`Book`** : `totalCopies` (≥ 1) et `availableCopies` (≥ 0, jamais > `totalCopies`).
+  À la création, `availableCopies` est initialisé à `totalCopies`.
+- **`Loan`** : `memberName`, `bookId`, `bookTitle` (snapshot copié depuis
+  `book-service`), `loanDate`, `dueDate` (= `loanDate + 14 jours`), `returnDate`
+  (null tant que non rendu), `status` (`ACTIVE` / `RETURNED`).
 
 ### API
 
@@ -96,16 +106,36 @@ Dans le projet guidé, `order-service` ne faisait que **lire** chez `product-ser
 |---------|----------|------|
 | `GET` | `/api/books` | Liste les livres |
 | `GET` | `/api/books/{id}` | Récupère un livre |
-| `POST` | `/api/books` | Ajoute un livre |
+| `POST` | `/api/books` | Ajoute un livre (`availableCopies = totalCopies`) |
 | `PUT` | `/api/books/{id}` | Modifie un livre |
 | `DELETE` | `/api/books/{id}` | Supprime un livre |
-| `POST` | `/api/books/{id}/borrow` | (interne) décrémente le stock — `409` si aucun exemplaire |
-| `POST` | `/api/books/{id}/return` | (interne) réincrémente le stock |
+| `PATCH` | `/api/books/{id}/decrement-stock` | (interne) décrémente le stock — `409` si déjà à 0 |
+| `PATCH` | `/api/books/{id}/increment-stock` | (interne) réincrémente le stock, sans dépasser `totalCopies` — `409` sinon |
 | `GET` | `/api/loans` | Liste les emprunts |
 | `GET` | `/api/loans/{id}` | Récupère un emprunt |
-| `POST` | `/api/loans` | Crée un emprunt (décrémente le stock) — `409` si aucun exemplaire |
-| `POST` | `/api/loans/{id}/return` | Rend un emprunt (réincrémente le stock) |
-| `DELETE` | `/api/loans/{id}` | Supprime un emprunt |
+| `POST` | `/api/loans` | Crée un emprunt (vérifie, décrémente, fixe `dueDate = +14 j`) — `409` si aucun exemplaire |
+| `PATCH` | `/api/loans/{id}/return` | Rend un emprunt (réincrémente le stock) — `409` si déjà rendu |
+
+### Règle métier — création d'un emprunt (`POST /api/loans`)
+
+```
+Requête { "memberName": "Bob", "bookId": 3 }
+  │
+  ▼
+1. loan-service → GET /api/books/3
+  │ ├── livre inexistant ────────────────▶ 400
+  │ ├── availableCopies == 0 ────────────▶ 409 (pas d'appel decrement-stock)
+  │ └── availableCopies > 0
+  │        ▼
+2. loan-service → PATCH /api/books/3/decrement-stock
+  │ ├── book-service refuse (409, concurrence) ─────▶ 409 au client
+  │ └── book-service décrémente (200)
+  │        ▼
+3. crée l'emprunt : ACTIVE, dueDate = loanDate + 14 jours → 201
+```
+
+Les erreurs sont renvoyées sous un corps uniforme `ApiError`
+(`timestamp`, `status`, `error`, `message`, `details`).
 
 ### Construit dans cette étape
 
@@ -218,10 +248,10 @@ curl http://localhost:8080/api/books/1                # GET one
 # Emprunter un livre (décrémente le stock)
 curl -X POST http://localhost:8080/api/loans \
   -H "Content-Type: application/json" \
-  -d '{"bookId":1,"borrowerName":"Alice"}'
+  -d '{"bookId":1,"memberName":"Alice"}'
 
 # Rendre un livre (réincrémente le stock)
-curl -X POST http://localhost:8080/api/loans/1/return
+curl -X PATCH http://localhost:8080/api/loans/1/return
 ```
 
 ### 5) Swagger / OpenAPI

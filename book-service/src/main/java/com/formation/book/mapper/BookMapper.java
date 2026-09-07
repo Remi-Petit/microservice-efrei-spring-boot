@@ -18,16 +18,20 @@ public final class BookMapper {
                 book.getIsbn(),
                 book.getTitle(),
                 book.getAuthor(),
+                book.getTotalCopies(),
                 book.getAvailableCopies()
         );
     }
 
     public static Book toEntity(BookRequest request) {
+        // A la creation, le nombre d'exemplaires disponibles est initialise
+        // au nombre total (aucun n'a encore ete emprunte).
         return new Book(
                 request.isbn(),
                 request.title(),
                 request.author(),
-                request.availableCopies()
+                request.totalCopies(),
+                request.totalCopies()
         );
     }
 }

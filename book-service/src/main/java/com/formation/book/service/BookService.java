@@ -4,6 +4,7 @@ import com.formation.book.dto.BookRequest;
 import com.formation.book.dto.BookResponse;
 import com.formation.book.exception.BookNotFoundException;
 import com.formation.book.exception.InsufficientCopiesException;
+import com.formation.book.exception.TooManyCopiesException;
 import com.formation.book.mapper.BookMapper;
 import com.formation.book.model.Book;
 import com.formation.book.repository.BookRepository;
@@ -43,7 +44,11 @@ public class BookService {
         book.setIsbn(request.isbn());
         book.setTitle(request.title());
         book.setAuthor(request.author());
-        book.setAvailableCopies(request.availableCopies());
+        book.setTotalCopies(request.totalCopies());
+        // On ne reduit jamais le nombre disponible au-dela du nouveau total.
+        if (book.getAvailableCopies() > request.totalCopies()) {
+            book.setAvailableCopies(request.totalCopies());
+        }
         return BookMapper.toResponse(bookRepository.save(book));
     }
 
@@ -59,9 +64,11 @@ public class BookService {
      * Décrémente le nombre d'exemplaires disponibles lors d'un emprunt.
      * RE-VERIFIE la disponibilité : ne fait jamais confiance à l'appelant
      * (défense en profondeur, meme s'il s'agit d'un microservice interne).
+     * C'est le volet "use" du probleme TOCTOU : la re-verification evite qu'un
+     * emprunt concurrent ne consomme le dernier exemplaire entre le check et ici.
      */
     @Transactional
-    public BookResponse borrow(Long id) {
+    public BookResponse decrementStock(Long id) {
         Book book = findBook(id);
         if (book.getAvailableCopies() <= 0) {
             throw new InsufficientCopiesException(id);
@@ -71,11 +78,15 @@ public class BookService {
     }
 
     /**
-     * Réincrémente le nombre d'exemplaires disponibles lors d'un retour.
+     * Réincrémente le nombre d'exemplaires disponibles lors d'un retour,
+     * sans jamais depasser le nombre total.
      */
     @Transactional
-    public BookResponse giveBack(Long id) {
+    public BookResponse incrementStock(Long id) {
         Book book = findBook(id);
+        if (book.getAvailableCopies() >= book.getTotalCopies()) {
+            throw new TooManyCopiesException(id);
+        }
         book.setAvailableCopies(book.getAvailableCopies() + 1);
         return BookMapper.toResponse(bookRepository.save(book));
     }

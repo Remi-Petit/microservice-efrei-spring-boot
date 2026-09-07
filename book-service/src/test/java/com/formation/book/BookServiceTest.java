@@ -4,6 +4,7 @@ import com.formation.book.dto.BookRequest;
 import com.formation.book.dto.BookResponse;
 import com.formation.book.exception.BookNotFoundException;
 import com.formation.book.exception.InsufficientCopiesException;
+import com.formation.book.exception.TooManyCopiesException;
 import com.formation.book.model.Book;
 import com.formation.book.repository.BookRepository;
 import com.formation.book.service.BookService;
@@ -31,6 +32,12 @@ class BookServiceTest {
     @InjectMocks
     private BookService bookService;
 
+    private Book book(String isbn, String title, String author, int total, int available) {
+        Book b = new Book(isbn, title, author, total, available);
+        b.setId(1L);
+        return b;
+    }
+
     @Test
     void findById_livreInexistant_leveBookNotFoundException() {
         when(bookRepository.findById(99L)).thenReturn(Optional.empty());
@@ -41,7 +48,7 @@ class BookServiceTest {
     }
 
     @Test
-    void create_sauvegardeEtRetourneLeLivreCree() {
+    void create_initialiseLeStockAuTotal() {
         BookRequest request = new BookRequest("978-2-07-061275-8", "Le Petit Prince", "Saint-Exupery", 3);
         when(bookRepository.save(any(Book.class))).thenAnswer(invocation -> {
             Book b = invocation.getArgument(0);
@@ -53,41 +60,45 @@ class BookServiceTest {
 
         assertThat(result.id()).isEqualTo(1L);
         assertThat(result.isbn()).isEqualTo("978-2-07-061275-8");
+        assertThat(result.totalCopies()).isEqualTo(3);
         assertThat(result.availableCopies()).isEqualTo(3);
     }
 
     @Test
-    void borrow_decrementeLeStock() {
-        Book book = new Book("isbn", "Titre", "Auteur", 2);
-        book.setId(1L);
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
+    void decrementStock_reduitLeStock() {
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book("isbn", "Titre", "Auteur", 3, 3)));
         when(bookRepository.save(any(Book.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        BookResponse result = bookService.borrow(1L);
+        BookResponse result = bookService.decrementStock(1L);
 
-        assertThat(result.availableCopies()).isEqualTo(1);
+        assertThat(result.availableCopies()).isEqualTo(2);
+        assertThat(result.totalCopies()).isEqualTo(3);
     }
 
     @Test
-    void borrow_plusAucunExemplaire_leveInsufficientCopiesException() {
-        Book book = new Book("isbn", "Titre", "Auteur", 0);
-        book.setId(1L);
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
+    void decrementStock_stockEpuise_leveInsufficientCopiesException() {
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book("isbn", "Titre", "Auteur", 1, 0)));
 
-        assertThatThrownBy(() -> bookService.borrow(1L))
+        assertThatThrownBy(() -> bookService.decrementStock(1L))
                 .isInstanceOf(InsufficientCopiesException.class);
     }
 
     @Test
-    void giveBack_reincrementeLeStock() {
-        Book book = new Book("isbn", "Titre", "Auteur", 0);
-        book.setId(1L);
-        when(bookRepository.findById(1L)).thenReturn(Optional.of(book));
+    void incrementStock_ajouteUnExemplaire() {
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book("isbn", "Titre", "Auteur", 3, 2)));
         when(bookRepository.save(any(Book.class))).thenAnswer(invocation -> invocation.getArgument(0));
 
-        BookResponse result = bookService.giveBack(1L);
+        BookResponse result = bookService.incrementStock(1L);
 
-        assertThat(result.availableCopies()).isEqualTo(1);
+        assertThat(result.availableCopies()).isEqualTo(3);
+    }
+
+    @Test
+    void incrementStock_neDepasseJamaisLeTotal() {
+        when(bookRepository.findById(1L)).thenReturn(Optional.of(book("isbn", "Titre", "Auteur", 3, 3)));
+
+        assertThatThrownBy(() -> bookService.incrementStock(1L))
+                .isInstanceOf(TooManyCopiesException.class);
     }
 
     @Test

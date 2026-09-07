@@ -17,7 +17,7 @@ import feign.FeignException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 
 @Service
@@ -44,27 +44,26 @@ public class LoanService {
     /**
      * Cree un emprunt.
      *
-     * DEFENSE EN PROFONDEUR (2 niveaux) :
-     *  1. Ici, on LIT le livre et on verifie la disponibilite avant d'appeler.
-     *  2. Puis on appelle book-service qui RE-VERIFIE a nouveau avant de
-     *     decrémenter son propre stock (on ne fait jamais confiance a un
-     *     appelant, meme interne).
+     * Probleme TOCTOU (Time-Of-Check to Time-Of-Use) : entre l'etape 1 (verifier
+     * la disponibilite) et l'etape 2 (decrémenter), un autre emprunt concurrent
+     * peut avoir consomme le dernier exemplaire. C'est pourquoi book-service
+     * RE-VERIFIE la condition au moment de decrémenter (defense en profondeur).
      */
     @Transactional
     public LoanResponse create(LoanRequest request) {
         Long bookId = request.bookId();
 
-        // Couche 1 : verifier la disponibilite avant l'appel (pré-contrôle)
+        // ---- Etape 1 : LECTURE et verification prealable (le "check") ----
         BookDto book = fetchBook(bookId);
         if (book.getAvailableCopies() <= 0) {
             throw new InsufficientCopiesForLoanException(bookId);
         }
 
-        // Couche 2 : book-service re-verifie et decremente le stock.
-        // Si plus aucun exemplaire, book-service renvoie 409 -> FeignException.Conflict
-        // -> traduit en InsufficientCopiesForLoanException (409).
+        // ---- Etape 2 : ECRITURE (le "use") ----
+        // book-service re-verifie le stock avant de decrementer. S'il n'y a plus
+        // d'exemplaire (concurrence), il repond 409 -> FeignException.Conflict.
         try {
-            bookClient.borrowBook(bookId);
+            bookClient.decrementStock(bookId);
         } catch (FeignException.Conflict ex) {
             throw new InsufficientCopiesForLoanException(bookId);
         } catch (FeignException.NotFound ex) {
@@ -73,13 +72,22 @@ public class LoanService {
             throw new BookServiceUnavailableException(ex);
         }
 
-        Loan loan = new Loan(book.getId(), book.getTitle(), request.borrowerName(), Instant.now(), LoanStatus.BORROWED);
+        // ---- Etape 3 : creation du snapshot (titre copie) + dueDate = +14 jours ----
+        LocalDate loanDate = LocalDate.now();
+        Loan loan = new Loan(
+                request.memberName(),
+                book.getId(),
+                book.getTitle(),
+                loanDate,
+                loanDate.plusDays(14),
+                LoanStatus.ACTIVE
+        );
         return LoanMapper.toResponse(loanRepository.save(loan));
     }
 
     /**
-     * Rendre un emprunt : re-incremente le stock cote book-service puis marque
-     * l'emprunt comme RETOURNE.
+     * Rendre un emprunt : verifie qu'il est encore ACTIVE, re-incremente le stock
+     * cote book-service puis marque l'emprunt comme RETOURNE.
      */
     @Transactional
     public LoanResponse giveBack(Long id) {
@@ -89,7 +97,7 @@ public class LoanService {
         }
 
         try {
-            bookClient.returnBook(loan.getBookId());
+            bookClient.incrementStock(loan.getBookId());
         } catch (FeignException.NotFound ex) {
             throw new BookNotFoundForLoanException(loan.getBookId());
         } catch (FeignException ex) {
@@ -97,7 +105,7 @@ public class LoanService {
         }
 
         loan.setStatus(LoanStatus.RETURNED);
-        loan.setReturnDate(Instant.now());
+        loan.setReturnDate(LocalDate.now());
         return LoanMapper.toResponse(loanRepository.save(loan));
     }
 

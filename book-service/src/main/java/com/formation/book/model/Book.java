@@ -25,15 +25,19 @@ public class Book {
     private String author;
 
     @Column(nullable = false)
+    private Integer totalCopies;
+
+    @Column(nullable = false)
     private Integer availableCopies;
 
     public Book() {
     }
 
-    public Book(String isbn, String title, String author, Integer availableCopies) {
+    public Book(String isbn, String title, String author, Integer totalCopies, Integer availableCopies) {
         this.isbn = isbn;
         this.title = title;
         this.author = author;
+        this.totalCopies = totalCopies;
         this.availableCopies = availableCopies;
     }
 
@@ -67,6 +71,14 @@ public class Book {
 
     public void setAuthor(String author) {
         this.author = author;
+    }
+
+    public Integer getTotalCopies() {
+        return totalCopies;
+    }
+
+    public void setTotalCopies(Integer totalCopies) {
+        this.totalCopies = totalCopies;
     }
 
     public Integer getAvailableCopies() {

@@ -14,6 +14,7 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -45,6 +46,8 @@ class BookControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.title").value("Le Petit Prince"))
+                .andExpect(jsonPath("$.totalCopies").value(3))
+                .andExpect(jsonPath("$.availableCopies").value(3))
                 .andReturn().getResponse().getContentAsString();
 
         Long id = objectMapper.readTree(response).get("id").asLong();
@@ -56,7 +59,7 @@ class BookControllerIntegrationTest {
 
     @Test
     void create_requeteInvalide_retourne400() throws Exception {
-        BookRequest invalid = new BookRequest("", "", "", -1);
+        BookRequest invalid = new BookRequest("", "", "", 0);
 
         mockMvc.perform(post("/api/books")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -65,26 +68,33 @@ class BookControllerIntegrationTest {
     }
 
     @Test
-    void borrow_livreSansExemplaire_retourne409() throws Exception {
-        Book book = new Book("isbn", "Titre", "Auteur", 0);
-        book = bookRepository.save(book);
+    void decrementStock_livreSansExemplaire_retourne409() throws Exception {
+        Book book = bookRepository.save(new Book("isbn", "Titre", "Auteur", 1, 0));
 
-        mockMvc.perform(post("/api/books/{id}/borrow", book.getId()))
+        mockMvc.perform(patch("/api/books/{id}/decrement-stock", book.getId()))
                 .andExpect(status().isConflict());
     }
 
     @Test
-    void borrow_livreDisponible_decrementeLeStock() throws Exception {
-        Book book = bookRepository.save(new Book("isbn", "Titre", "Auteur", 2));
+    void decrementStock_livreDisponible_reduitLeStock() throws Exception {
+        Book book = bookRepository.save(new Book("isbn", "Titre", "Auteur", 2, 2));
 
-        mockMvc.perform(post("/api/books/{id}/borrow", book.getId()))
+        mockMvc.perform(patch("/api/books/{id}/decrement-stock", book.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.availableCopies").value(1));
     }
 
     @Test
+    void incrementStock_neDepassePasLeTotal_retourne409() throws Exception {
+        Book book = bookRepository.save(new Book("isbn", "Titre", "Auteur", 1, 1));
+
+        mockMvc.perform(patch("/api/books/{id}/increment-stock", book.getId()))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
     void delete_livreExistant_retourne204() throws Exception {
-        Book book = bookRepository.save(new Book("isbn", "Titre", "Auteur", 1));
+        Book book = bookRepository.save(new Book("isbn", "Titre", "Auteur", 1, 1));
 
         mockMvc.perform(delete("/api/books/{id}", book.getId()))
                 .andExpect(status().isNoContent());

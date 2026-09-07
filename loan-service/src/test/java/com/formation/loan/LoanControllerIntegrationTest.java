@@ -2,6 +2,7 @@ package com.formation.loan;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.formation.loan.client.BookClient;
+import com.formation.loan.client.BookClient;
 import com.formation.loan.dto.BookDto;
 import com.formation.loan.dto.LoanRequest;
 import com.formation.loan.model.Loan;
@@ -23,6 +24,7 @@ import java.util.HashMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -70,7 +72,7 @@ class LoanControllerIntegrationTest {
     @Test
     void cycleDeVieComplet_creerEtRecuperer() throws Exception {
         when(bookClient.getBookById(eq(1L))).thenReturn(book(1L, "Le Petit Prince", 3));
-        when(bookClient.borrowBook(1L)).thenReturn(book(1L, "Le Petit Prince", 2));
+        when(bookClient.decrementStock(1L)).thenReturn(book(1L, "Le Petit Prince", 2));
 
         LoanRequest createRequest = new LoanRequest(1L, "Alice");
 
@@ -79,14 +81,15 @@ class LoanControllerIntegrationTest {
                         .content(objectMapper.writeValueAsString(createRequest)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.bookTitle").value("Le Petit Prince"))
-                .andExpect(jsonPath("$.status").value("BORROWED"))
+                .andExpect(jsonPath("$.status").value("ACTIVE"))
+                .andExpect(jsonPath("$.dueDate").isNotEmpty())
                 .andReturn().getResponse().getContentAsString();
 
         Long id = objectMapper.readTree(response).get("id").asLong();
 
         mockMvc.perform(get("/api/loans/{id}", id))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.borrowerName").value("Alice"));
+                .andExpect(jsonPath("$.memberName").value("Alice"));
     }
 
     @Test
@@ -117,5 +120,29 @@ class LoanControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(invalid)))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void return_marqueLEmpruntCommeRendu() throws Exception {
+        Loan loan = new Loan("Alice", 1L, "Le Petit Prince",
+                java.time.LocalDate.now(), java.time.LocalDate.now().plusDays(14), LoanStatus.ACTIVE);
+        Loan saved = loanRepository.save(loan);
+        when(bookClient.incrementStock(1L)).thenReturn(book(1L, "Le Petit Prince", 2));
+
+        mockMvc.perform(patch("/api/loans/{id}/return", saved.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("RETURNED"))
+                .andExpect(jsonPath("$.returnDate").isNotEmpty());
+    }
+
+    @Test
+    void return_dejaRendu_retourne409() throws Exception {
+        Loan loan = new Loan("Alice", 1L, "Le Petit Prince",
+                java.time.LocalDate.now(), java.time.LocalDate.now().plusDays(14), LoanStatus.RETURNED);
+        loan.setReturnDate(java.time.LocalDate.now());
+        Loan saved = loanRepository.save(loan);
+
+        mockMvc.perform(patch("/api/loans/{id}/return", saved.getId()))
+                .andExpect(status().isConflict());
     }
 }

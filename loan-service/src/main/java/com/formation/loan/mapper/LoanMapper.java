@@ -16,8 +16,9 @@ public final class LoanMapper {
                 loan.getId(),
                 loan.getBookId(),
                 loan.getBookTitle(),
-                loan.getBorrowerName(),
+                loan.getMemberName(),
                 loan.getLoanDate(),
+                loan.getDueDate(),
                 loan.getReturnDate(),
                 loan.getStatus()
         );

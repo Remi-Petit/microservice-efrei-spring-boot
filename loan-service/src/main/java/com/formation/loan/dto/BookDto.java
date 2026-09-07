@@ -9,6 +9,7 @@ public class BookDto {
     private String isbn;
     private String title;
     private String author;
+    private Integer totalCopies;
     private Integer availableCopies;
 
     public Long getId() {
@@ -41,6 +42,14 @@ public class BookDto {
 
     public void setAuthor(String author) {
         this.author = author;
+    }
+
+    public Integer getTotalCopies() {
+        return totalCopies;
+    }
+
+    public void setTotalCopies(Integer totalCopies) {
+        this.totalCopies = totalCopies;
     }
 
     public Integer getAvailableCopies() {

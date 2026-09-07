@@ -9,7 +9,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 
-import java.time.Instant;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "loans")
@@ -20,19 +20,23 @@ public class Loan {
     private Long id;
 
     @Column(nullable = false)
+    private String memberName;
+
+    @Column(nullable = false)
     private Long bookId;
 
-    // Snapshot du titre au moment de l'emprunt (le livre peut etre modifie ensuite)
+    // Snapshot du titre copie depuis book-service au moment de l'emprunt
+    // (rappel du concept de "snapshot" du module 7).
     @Column(nullable = false)
     private String bookTitle;
 
     @Column(nullable = false)
-    private String borrowerName;
+    private LocalDate loanDate;
 
     @Column(nullable = false)
-    private Instant loanDate;
+    private LocalDate dueDate;
 
-    private Instant returnDate;
+    private LocalDate returnDate;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
@@ -41,16 +45,26 @@ public class Loan {
     public Loan() {
     }
 
-    public Loan(Long bookId, String bookTitle, String borrowerName, Instant loanDate, LoanStatus status) {
+    public Loan(String memberName, Long bookId, String bookTitle, LocalDate loanDate,
+                LocalDate dueDate, LoanStatus status) {
+        this.memberName = memberName;
         this.bookId = bookId;
         this.bookTitle = bookTitle;
-        this.borrowerName = borrowerName;
         this.loanDate = loanDate;
+        this.dueDate = dueDate;
         this.status = status;
     }
 
     public Long getId() {
         return id;
+    }
+
+    public String getMemberName() {
+        return memberName;
+    }
+
+    public void setMemberName(String memberName) {
+        this.memberName = memberName;
     }
 
     public Long getBookId() {
@@ -69,27 +83,27 @@ public class Loan {
         this.bookTitle = bookTitle;
     }
 
-    public String getBorrowerName() {
-        return borrowerName;
-    }
-
-    public void setBorrowerName(String borrowerName) {
-        this.borrowerName = borrowerName;
-    }
-
-    public Instant getLoanDate() {
+    public LocalDate getLoanDate() {
         return loanDate;
     }
 
-    public void setLoanDate(Instant loanDate) {
+    public void setLoanDate(LocalDate loanDate) {
         this.loanDate = loanDate;
     }
 
-    public Instant getReturnDate() {
+    public LocalDate getDueDate() {
+        return dueDate;
+    }
+
+    public void setDueDate(LocalDate dueDate) {
+        this.dueDate = dueDate;
+    }
+
+    public LocalDate getReturnDate() {
         return returnDate;
     }
 
-    public void setReturnDate(Instant returnDate) {
+    public void setReturnDate(LocalDate returnDate) {
         this.returnDate = returnDate;
     }
 
