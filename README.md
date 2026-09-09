@@ -162,3 +162,184 @@ Les scénarios sont regroupés dans `api-gateway.http` (client REST) :
 
 Les erreurs sont renvoyées sous un corps uniforme `ApiError`
 (`timestamp`, `status`, `error`, `message`, `details`).
+
+---
+
+# Module 12 — FitConnect (Réservation de cours de sport)
+
+> **Contexte** : FitConnect est une startup qui permet de réserver des cours dans
+> des salles de sport partenaires. Quatre nouveaux microservices ont été construits
+> en **réutilisant** l'infrastructure existante (`eureka-server`, `config-server`,
+> `api-gateway`).
+>
+> **Ports** : les 4 services utilisent les ports **8095-8098** (décalés car `book-service`
+> (8091) et `loan-service` (8092) du TP bibliothèque occupent déjà 8091/8092).
+
+**Stack** : Spring Boot 3.3.2 · Spring Cloud 2023.0.3 · Java 17 · OpenFeign · JPA + H2.
+
+---
+
+## 1. Architecture
+
+L'infrastructure est réutilisée ; **4 services métier** on été ajoutés.
+
+```
+┌──────────────┐     ┌───────────────┐
+│  api-gateway │────▶│ config-server │──▶ config-repo/*.yml (4 nouveaux fichiers)
+│    :8080     │     │      :8888    │
+└──────┬───────┘     └──────┬────────┘
+       ▼                    ▼
+   eureka-server ←─────────┴── (annuaire / découverte)
+       :8761
+       │
+       ▼
+┌──────────────────┐  Feign (get/increment/decrement)  ┌──────────────────┐
+│  booking-service │────▶  class-service               │     :8095       │
+│      :8096       │                                    │  base H2 "classdb"
+└────────┬─────────┘                                    └──────────────────┘
+         │ Feign (POST /payments, /refund)                    │
+         ▼                                                    ▼
+┌──────────────────┐                                ┌──────────────────┐
+│  payment-service │                                │ notification-svc │
+│      :8097       │                                │     :8098        │
+│  base "paymentdb"│                                │ base "notifdb"   │
+└──────────────────┘                                └──────────────────┘
+```
+
+| Service               | Port | Base H2      | Rôle                                                    |
+|-----------------------|------|--------------|---------------------------------------------------------|
+| `class-service`       | 8095 | `classdb`    | CRUD des cours + compteur de places (**verrouillage optimiste**) |
+| `booking-service`     | 8096 | `bookingdb`  | Réservations (**pattern Saga** : orchestre class/payment/notification) + scheduler |
+| `payment-service`     | 8097 | `paymentdb`  | Paiements simulés (accepte < 100 €, refuse ≥ 100 €) + remboursement |
+| `notification-service`| 8098 | `notificationdb` | Envoi d'emails/SMS simulés + historique + retry |
+
+---
+
+## 2. Points pédagogiques mis en avant
+
+| Concept | Où ? |
+|---------|------|
+| **Orchestration Saga** | `booking-service` : create → increment → save → notify, avec **compensation** (decrement) en cas d'échec |
+| **Paiement différé** | `PENDING_PAYMENT` → confirmation → `CONFIRMED` (deadline = +1h) |
+| **Politique d'annulation** | Annulation gratuite jusqu'à `classDate - 24h`, remboursement si déjà payé |
+| **Verrouillage optimiste** | `class-service` : champ `@Version` sur `FitnessClass` → empêche les surréservations |
+| **TOCTOU** | `booking-service` vérifie puis réserve, et `class-service` **re-vérifie** à l'écriture |
+| **Snapshots** | `Booking` copie `className`, `classDate`, `instructor`, `price` (comme le module 7) |
+| **Scheduler** | `booking-service` : expiration des paiements (5 min) + rappel des cours (J-24h) |
+
+---
+
+## 3. Workflow de Réservation (Saga)
+
+### Cas 1 — Réservation réussie
+1. `booking-service` lit le cours (`GET /api/classes/{id}`) et vérifie la capacité.
+2. Il réserve (`PATCH /api/classes/{id}/increment?spots=N`), re-vérifié côté `class-service`.
+3. Crée la réservation **PENDING_PAYMENT** (`paymentDeadline = +1h`, `cancellationDeadline = classDate - 24h`).
+4. Envoie une notification `BOOKING_CONFIRMATION`.
+
+### Cas 2 — Plus de places (conflit)
+Si `class-service` répond **409** à l'`increment` (concurrence), `booking-service`
+renvoie **409** et **aucune réservation n'est créée** (cas 2 du cahier des charges).
+
+### Cas 3 — Confirmation après paiement
+`PATCH /api/bookings/{id}/confirm` → `payment-service` simule le paiement
+(< 100 € accepté, ≥ 100 € refusé). Succès → `CONFIRMED` + notification.
+
+### Cas 4 — Annulation (dans les délais)
+`PATCH /api/bookings/{id}/cancel` → remboursement si payé, libération des places,
+annulation + notification.
+
+---
+
+## 4. Endpoints
+
+### `class-service` (`:8095`)
+| Méthode | Endpoint | Rôle |
+|---------|----------|------|
+| `GET`    | `/api/classes`            | Liste + filtres (`?category=&level=&location=&instructor=&dateFrom=&dateTo=`) + pagination |
+| `GET`    | `/api/classes/search`     | Recherche (mêmes filtres) |
+| `GET`    | `/api/classes/{id}`       | Récupère un cours |
+| `POST`   | `/api/classes`            | Crée un cours |
+| `PUT`    | `/api/classes/{id}`       | Modifie un cours |
+| `DELETE` | `/api/classes/{id}`       | Annule un cours (`status = CANCELLED`) |
+| `PATCH`  | `/api/classes/{id}/increment?spots=N` | (interne) réserve des places — `409` si capacité dépassée |
+| `PATCH`  | `/api/classes/{id}/decrement?spots=N` | (interne) libère des places |
+
+### `booking-service` (`:8096`)
+| Méthode | Endpoint | Rôle |
+|---------|----------|------|
+| `GET`    | `/api/bookings`               | Liste des réservations |
+| `GET`    | `/api/bookings/{id}`          | Récupère une réservation |
+| `GET`    | `/api/bookings/user/{userId}` | Réservations d'un utilisateur |
+| `POST`   | `/api/bookings`               | Crée une réservation (Saga) |
+| `PATCH`  | `/api/bookings/{id}/confirm`  | Confirme après paiement |
+| `PATCH`  | `/api/bookings/{id}/cancel`   | Annule (rembourse + libère) |
+| `PATCH`  | `/api/bookings/{id}/complete` | Marque comme terminée |
+| `GET`    | `/api/bookings/expired`       | Réservations en attente expirées |
+
+### `payment-service` (`:8097`)
+| Méthode | Endpoint | Rôle |
+|---------|----------|------|
+| `POST`  | `/api/payments`                  | Traite un paiement (simulation) |
+| `GET`   | `/api/payments/booking/{bookingId}` | Paiement d'une réservation |
+| `POST`  | `/api/payments/{id}/refund`      | Rembourse |
+| `GET`   | `/api/payments/user/{userId}`    | Historique d'un utilisateur |
+
+### `notification-service` (`:8098`)
+| Méthode | Endpoint | Rôle |
+|---------|----------|------|
+| `POST`  | `/api/notifications`                | Envoie une notification (simulation) |
+| `GET`   | `/api/notifications/user/{userId}`  | Historique |
+| `GET`   | `/api/notifications/pending`        | En attente (pour le scheduler) |
+| `PATCH` | `/api/notifications/{id}/retry`     | Réessaie l'envoi |
+
+---
+
+## 5. Lancer le projet
+
+Ordre : `eureka-server` → `config-server` → `api-gateway` → `class-service` →
+`payment-service` → `notification-service` → `booking-service`.
+
+### Sans Docker
+```bash
+mvn -pl eureka-server spring-boot:run
+mvn -pl config-server spring-boot:run
+mvn -pl api-gateway   spring-boot:run
+mvn -pl class-service spring-boot:run
+mvn -pl payment-service spring-boot:run
+mvn -pl notification-service spring-boot:run
+mvn -pl booking-service spring-boot:run
+```
+
+### Avec Docker
+```bash
+docker compose up --build
+docker compose ps   # attendre que tout soit "healthy"
+```
+
+### Tester via la gateway (`http://localhost:8080`)
+Les scénarios sont regroupés dans `fitconnect.http` :
+1. Création d'un cours ; 2. Réservation réussie ; 3. Réservation refusée (places pleines → `409`) ;
+4. Confirmation après paiement ; 5. Annulation (remboursement) ; 6. Paiement refusé (≥ 100 €).
+
+### Swagger / OpenAPI
+- `class-service` : `http://localhost:8095/swagger-ui.html`
+- `booking-service` : `http://localhost:8096/swagger-ui.html`
+- `payment-service` : `http://localhost:8097/swagger-ui.html`
+- `notification-service` : `http://localhost:8098/swagger-ui.html`
+
+---
+
+## 6. Tests
+
+- **`class-service`** : 18 tests (10 unitaires + 8 intégration)
+- **`booking-service`** : 15 tests (11 unitaires + 4 intégration)
+- **`payment-service`** : 12 tests (7 unitaires + 5 intégration)
+- **`notification-service`** : 10 tests (5 unitaires + 5 intégration)
+
+```bash
+mvn -pl class-service,booking-service,payment-service,notification-service -am test
+```
+
+**Total** : **55 tests**, `BUILD SUCCESS`.
+

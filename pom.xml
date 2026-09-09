@@ -28,6 +28,11 @@
         <module>order-service</module>
         <module>book-service</module>
         <module>loan-service</module>
+        <!-- Module 11 : plateforme FitConnect (reservation de cours de sport) -->
+        <module>class-service</module>
+        <module>booking-service</module>
+        <module>payment-service</module>
+        <module>notification-service</module>
     </modules>
 
     <properties>

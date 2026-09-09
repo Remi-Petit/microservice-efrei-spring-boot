@@ -1,0 +1,147 @@
+@gatewayUrl = http://localhost:8080
+
+### Sante de la gateway
+GET {{gatewayUrl}}/actuator/health
+
+
+###############################################################################
+# CLASS-SERVICE (via la gateway)
+###############################################################################
+
+### 1. Création d'un cours
+# @name creerCours
+POST {{gatewayUrl}}/api/classes
+Content-Type: application/json
+
+{
+  "name": "Yoga du matin",
+  "description": "Cours de yoga doux pour débutants",
+  "instructor": "Marie",
+  "gymLocation": "Paris",
+  "category": "YOGA",
+  "level": "BEGINNER",
+  "durationMinutes": 60,
+  "maxParticipants": 10,
+  "price": 20.00,
+  "dateTime": "2026-09-20T10:00:00"
+}
+
+### 2. Créer un cours presque plein (pour tester le 409)
+# @name coursPlein
+POST {{gatewayUrl}}/api/classes
+Content-Type: application/json
+
+{
+  "name": "CrossFit Intense",
+  "description": "Séance de crossfit",
+  "instructor": "Lucas",
+  "gymLocation": "Lyon",
+  "category": "CROSSFIT",
+  "level": "ADVANCED",
+  "durationMinutes": 45,
+  "maxParticipants": 5,
+  "price": 35.00,
+  "dateTime": "2026-09-21T18:00:00"
+}
+
+### 3. Lister les cours (filtres + pagination)
+GET {{gatewayUrl}}/api/classes?category=YOGA&level=BEGINNER&size=10
+
+
+###############################################################################
+# BOOKING-SERVICE (via la gateway)
+###############################################################################
+
+### 4. Réservation réussie (2 places) — statut PENDING_PAYMENT
+# @name creerReservation
+POST {{gatewayUrl}}/api/bookings
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "userEmail": "john@example.com",
+  "userName": "John Doe",
+  "classId": {{creerCours.response.body.$.id}},
+  "numberOfSpots": 2
+}
+
+### 5. Récupérer la réservation
+GET {{gatewayUrl}}/api/bookings/{{creerReservation.response.body.$.id}}
+
+
+###############################################################################
+# Confirmation après paiement (< 100 EUR → accepté)
+###############################################################################
+
+### 6. Confirmer le paiement de la réservation
+# @name confirmerReservation
+PATCH {{gatewayUrl}}/api/bookings/{{creerReservation.response.body.$.id}}/confirm
+Content-Type: application/json
+
+{
+  "paymentMethod": "CREDIT_CARD",
+  "cardLastFour": "1234",
+  "transactionId": "txn_123456"
+}
+
+### 7. Paiement refusé (montant >= 100 EUR)
+# On réserve 5 places sur un cours à 35 EUR -> total = 175 EUR -> refusé
+# @name creerReservationGrosse
+POST {{gatewayUrl}}/api/bookings
+Content-Type: application/json
+
+{
+  "userId": 1,
+  "userEmail": "john@example.com",
+  "userName": "John Doe",
+  "classId": {{coursPlein.response.body.$.id}},
+  "numberOfSpots": 4
+}
+
+### 8. Confirmer ce paiement (>= 100 EUR -> status FAILED, réservation reste PENDING)
+PATCH {{gatewayUrl}}/api/bookings/{{creerReservationGrosse.response.body.$.id}}/confirm
+Content-Type: application/json
+
+{
+  "paymentMethod": "PAYPAL",
+  "transactionId": "txn_789"
+}
+
+
+###############################################################################
+# Cas de conflit — plus de places
+###############################################################################
+
+### 9. Réservation refusée (places pleines -> 409)
+POST {{gatewayUrl}}/api/bookings
+Content-Type: application/json
+
+{
+  "userId": 2,
+  "userEmail": "alice@example.com",
+  "userName": "Alice Smith",
+  "classId": {{coursPlein.response.body.$.id}},
+  "numberOfSpots": 5
+}
+
+
+###############################################################################
+# Annulation (dans les délais) — remboursement si déjà payé
+###############################################################################
+
+### 10. Annuler la réservation confirmée
+PATCH {{gatewayUrl}}/api/bookings/{{creerReservation.response.body.$.id}}/cancel
+
+### 11. Paiement remboursé
+GET {{gatewayUrl}}/api/payments/booking/{{creerReservation.response.body.$.id}}
+
+
+###############################################################################
+# NOTIFICATION-SERVICE (via la gateway)
+###############################################################################
+
+### 12. Historique des notifications de l'utilisateur
+GET {{gatewayUrl}}/api/notifications/user/1
+
+### 13. Notifications en attente (pour le scheduler)
+GET {{gatewayUrl}}/api/notifications/pending
