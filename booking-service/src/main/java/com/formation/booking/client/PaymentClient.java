@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 /**
  * Contrat Feign vers payment-service : traitement et remboursement d'un paiement.
  */
-@FeignClient(name = "payment-service")
+@FeignClient(name = "payment-service", fallbackFactory = PaymentClientFallbackFactory.class)
 public interface PaymentClient {
 
     @PostMapping("/api/payments")

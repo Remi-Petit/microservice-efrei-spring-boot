@@ -226,6 +226,7 @@ L'infrastructure est réutilisée ; **4 services métier** on été ajoutés.
 | **TOCTOU** | `booking-service` vérifie puis réserve, et `class-service` **re-vérifie** à l'écriture |
 | **Snapshots** | `Booking` copie `className`, `classDate`, `instructor`, `price` (comme le module 7) |
 | **Scheduler** | `booking-service` : expiration des paiements (5 min) + rappel des cours (J-24h) |
+| **Circuit Breaker** | `booking-service` : resilience4j (`feign.circuitbreaker.enabled=true`) + `@FeignClient(fallbackFactory=...)` sur class/payment/notification |
 
 ---
 
@@ -318,7 +319,9 @@ docker compose ps   # attendre que tout soit "healthy"
 ```
 
 ### Tester via la gateway (`http://localhost:8080`)
-Les scénarios sont regroupés dans `fitconnect.http` :
+Les scénarios sont regroupés dans `fitconnect.http` (client REST) **et** dans la
+**collection Postman** `fitconnect.postman_collection.json` (18 requêtes chaînées
+via variables de collection : création → réservation → paiement → annulation) :
 1. Création d'un cours ; 2. Réservation réussie ; 3. Réservation refusée (places pleines → `409`) ;
 4. Confirmation après paiement ; 5. Annulation (remboursement) ; 6. Paiement refusé (≥ 100 €).
 
@@ -342,4 +345,22 @@ mvn -pl class-service,booking-service,payment-service,notification-service -am t
 ```
 
 **Total** : **55 tests**, `BUILD SUCCESS`.
+
+---
+
+## 7. Livrables du TP FitConnect
+
+| Livrable | Statut | Emplacement |
+|----------|--------|-------------|
+| Code source (4 services) | ✅ | `class-service`, `booking-service`, `payment-service`, `notification-service` |
+| Fichiers de configuration `config-repo` | ✅ | `config-repo/class-service.yml`, `booking-service.yml`, `payment-service.yml`, `notification-service.yml` |
+| Routes dans `api-gateway.yml` | ✅ | 4 routes : `/api/classes/**`, `/api/bookings/**`, `/api/payments/**`, `/api/notifications/**` |
+| Clients Feign + **Circuit Breaker** | ✅ | `booking-service` : 3 `@FeignClient` + `fallbackFactory` + resilience4j |
+| Pattern Saga complet | ✅ | `booking-service` : réserver → payer → confirmer → annuler (avec compensation) |
+| Verrouillage optimiste | ✅ | `class-service` : `@Version` sur `FitnessClass` |
+| Scheduler (expiration paiements + rappels) | ✅ | `booking-service` : `BookingScheduler` (toutes les 5 min) |
+| Collection Postman complète | ✅ | `fitconnect.postman_collection.json` (18 requêtes) |
+| Tests unitaires + intégration | ✅ | 55 tests sur les 4 services |
+| README détaillé | ✅ | Ce document (section Module 12) |
+| Docker Compose | ✅ | 11 services, build multi-stage, healthchecks |
 

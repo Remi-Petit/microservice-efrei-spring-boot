@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RequestParam;
  * Contrat Feign vers class-service : lecture d'un cours + reservation /
  * liberation de places (endpoints d'ecriture re-verifiant la regle metier).
  */
-@FeignClient(name = "class-service")
+@FeignClient(name = "class-service", fallbackFactory = ClassClientFallbackFactory.class)
 public interface ClassClient {
 
     @GetMapping("/api/classes/{id}")

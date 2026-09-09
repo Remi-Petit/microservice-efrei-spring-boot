@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 /**
  * Contrat Feign vers notification-service : envoi d'une notification.
  */
-@FeignClient(name = "notification-service")
+@FeignClient(name = "notification-service", fallbackFactory = NotificationClientFallbackFactory.class)
 public interface NotificationClient {
 
     @PostMapping("/api/notifications")

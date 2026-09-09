@@ -1,0 +1,5 @@
+1. Cours id=1 status=SCHEDULED
+2. Reservation id=1 status=PENDING_PAYMENT
+3. Apres paiement status=CONFIRMED
+4. Apres annulation status=CANCELLED
+5. Paiement associe status=REFUNDED

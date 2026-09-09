@@ -289,8 +289,8 @@ public class BookingService {
     private void decrementQuietly(Long classId, int spots) {
         try {
             classClient.decrement(classId, spots);
-        } catch (FeignException ignored) {
-            // compensation best effort
+        } catch (RuntimeException ignored) {
+            // compensation best effort (incl. fallback du circuit breaker)
         }
     }
 
@@ -315,8 +315,8 @@ public class BookingService {
             if (payment.getId() != null) {
                 paymentClient.refund(payment.getId());
             }
-        } catch (FeignException ignored) {
-            // remboursement best effort
+        } catch (RuntimeException ignored) {
+            // remboursement best effort (incl. fallback du circuit breaker)
         }
     }
 
@@ -324,8 +324,8 @@ public class BookingService {
         try {
             notificationClient.send(new NotificationRequestDto(
                     booking.getUserId(), booking.getUserEmail(), type, subject, content));
-        } catch (FeignException ignored) {
-            // notification best effort
+        } catch (RuntimeException ignored) {
+            // notification best effort (incl. fallback du circuit breaker)
         }
     }
 }

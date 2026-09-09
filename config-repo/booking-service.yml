@@ -20,6 +20,29 @@ springdoc:
   swagger-ui:
     path: /swagger-ui.html
 
+# Activation du Circuit Breaker resilience4j sur les clients Feign
+feign:
+  circuitbreaker:
+    enabled: true
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        register-health-indicator: true
+    instances:
+      class-service:
+        base-config: default
+      payment-service:
+        base-config: default
+      notification-service:
+        base-config: default
+
 logging:
   level:
     feign: DEBUG

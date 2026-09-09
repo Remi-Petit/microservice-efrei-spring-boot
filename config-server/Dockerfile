@@ -9,7 +9,7 @@ FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 COPY --from=build /workspace/config-server/target/config-server-*.jar app.jar
 # config-repo/ est lu au demarrage via spring.cloud.config.server.native.search-locations=file:./config-repo
-COPY --from=build /workspace/config-server/config-repo config-repo
+COPY --from=build /workspace/config-repo config-repo
 
 EXPOSE 8888
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]
