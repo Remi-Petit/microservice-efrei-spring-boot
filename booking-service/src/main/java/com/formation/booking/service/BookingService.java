@@ -271,6 +271,7 @@ public class BookingService {
                     classClient.getClass().getSimpleName(), classId, spots, ex.status(),
                     ex.request() != null ? ex.request().url() : "?",
                     ex.getMessage());
+            log.error("BP diagnose increment", ex);
             throw new BookingServiceUnavailableException("class-service indisponible");
         }
     }
