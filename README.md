@@ -5,6 +5,8 @@
 
 **Stack** : Spring Boot 3.3.2 · Spring Cloud 2023.0.3 · Java 17 · Maven · Docker Compose
 
+**Équipe** : Rémi Petit - Matthys herreman
+
 ---
 
 ## 1. Contexte
