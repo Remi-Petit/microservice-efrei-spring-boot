@@ -7,12 +7,17 @@ import com.formation.booking.client.PaymentClient;
 import com.formation.booking.dto.BookingRequest;
 import com.formation.booking.dto.ConfirmPaymentRequest;
 import com.formation.booking.dto.FitnessClassDto;
+import com.formation.booking.dto.NotificationRequestDto;
 import com.formation.booking.dto.PaymentDto;
+import com.formation.booking.model.Booking;
+import com.formation.booking.model.BookingStatus;
 import com.formation.booking.repository.BookingRepository;
+import com.formation.booking.service.BookingService;
 import feign.FeignException;
 import feign.Request;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,8 +28,14 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.HashMap;
+import java.util.Set;
+import java.util.stream.Collectors;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -43,6 +54,9 @@ class BookingControllerIntegrationTest {
 
     @Autowired
     private BookingRepository repository;
+
+    @Autowired
+    private BookingService bookingService;
 
     @MockBean
     private ClassClient classClient;
@@ -145,5 +159,112 @@ class BookingControllerIntegrationTest {
         mockMvc.perform(patch("/api/bookings/{id}/cancel", id))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("CANCELLED"));
+    }
+
+    /**
+     * shouldCompleteFullBookingFlow : cours → réservation → paiement → annulation.
+     * Vérifie que les places sont incrémentées/décrémentées, que le paiement est
+     * traité et remboursé, et que les 3 notifications sont bien envoyées.
+     */
+    @Test
+    void cycleDeVieComplet_verifiePlacesEtNotifications() throws Exception {
+        when(classClient.getById(1L)).thenReturn(cls(10, 5));
+        when(classClient.increment(1L, 2)).thenReturn(cls(10, 7));
+        when(paymentClient.process(any())).thenReturn(payment("SUCCESS"));
+        when(paymentClient.getByBooking(1L)).thenReturn(payment("SUCCESS"));
+        when(paymentClient.refund(1L)).thenReturn(payment("REFUNDED"));
+        when(classClient.decrement(1L, 2)).thenReturn(cls(10, 5));
+
+        String response = mockMvc.perform(post("/api/bookings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long id = objectMapper.readTree(response).get("id").asLong();
+
+        mockMvc.perform(patch("/api/bookings/{id}/confirm", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ConfirmPaymentRequest("CREDIT_CARD", "1234", "txn_1"))))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(patch("/api/bookings/{id}/cancel", id))
+                .andExpect(status().isOk());
+
+        verify(classClient, times(1)).increment(1L, 2);
+        verify(classClient, times(1)).decrement(1L, 2);
+        verify(paymentClient, times(1)).process(any());
+        verify(paymentClient, times(1)).refund(1L);
+
+        ArgumentCaptor<NotificationRequestDto> captor = ArgumentCaptor.forClass(NotificationRequestDto.class);
+        verify(notificationClient, atLeast(3)).send(captor.capture());
+        Set<String> types = captor.getAllValues().stream()
+                .map(NotificationRequestDto::type)
+                .collect(Collectors.toSet());
+        assertThat(types).contains("BOOKING_CONFIRMATION", "PAYMENT_CONFIRMATION", "BOOKING_CANCELLED");
+    }
+
+    /**
+     * shouldCancelExpiredBookings : une réservation dont le délai de paiement est
+     * dépassé est annulée par le scheduler, les places sont libérées.
+     */
+    @Test
+    void expirePendingPayments_annuleLesReservationsExpirees() throws Exception {
+        Booking expired = new Booking("BK-EXP", 7L, "john@example.com", "John Doe", 1L,
+                "Yoga du matin", LocalDateTime.now().plusDays(7), "Marie",
+                new BigDecimal("20.00"), 2, new BigDecimal("40.00"), LocalDateTime.now(),
+                BookingStatus.PENDING_PAYMENT, LocalDateTime.now().minusMinutes(5),
+                LocalDateTime.now().plusDays(6));
+        repository.save(expired);
+
+        when(classClient.decrement(1L, 2)).thenReturn(cls(10, 5));
+
+        bookingService.expirePendingPayments();
+
+        Booking saved = repository.findAll().iterator().next();
+        assertThat(saved.getStatus()).isEqualTo(BookingStatus.CANCELLED);
+        verify(classClient).decrement(1L, 2);
+        verify(notificationClient, atLeast(1)).send(any(NotificationRequestDto.class));
+    }
+
+    @Test
+    void confirm_paiementExpire_retourne409() throws Exception {
+        when(classClient.getById(1L)).thenReturn(cls(10, 5));
+        when(classClient.increment(1L, 2)).thenReturn(cls(10, 7));
+
+        String response = mockMvc.perform(post("/api/bookings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long id = objectMapper.readTree(response).get("id").asLong();
+
+        Booking b = repository.findById(id).orElseThrow();
+        b.setPaymentDeadline(LocalDateTime.now().minusMinutes(5));
+        repository.save(b);
+
+        mockMvc.perform(patch("/api/bookings/{id}/confirm", id)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new ConfirmPaymentRequest("CREDIT_CARD", "1234", "txn_x"))))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void cancel_horsDelai_retourne409() throws Exception {
+        when(classClient.getById(1L)).thenReturn(cls(10, 5));
+        when(classClient.increment(1L, 2)).thenReturn(cls(10, 7));
+
+        String response = mockMvc.perform(post("/api/bookings")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req())))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        Long id = objectMapper.readTree(response).get("id").asLong();
+
+        Booking b = repository.findById(id).orElseThrow();
+        b.setCancellationDeadline(LocalDateTime.now().minusMinutes(1));
+        repository.save(b);
+
+        mockMvc.perform(patch("/api/bookings/{id}/cancel", id))
+                .andExpect(status().isConflict());
     }
 }

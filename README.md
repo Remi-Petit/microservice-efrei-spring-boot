@@ -336,7 +336,7 @@ via variables de collection : création → réservation → paiement → annula
 ## 6. Tests
 
 - **`class-service`** : 18 tests (10 unitaires + 8 intégration)
-- **`booking-service`** : 15 tests (11 unitaires + 4 intégration)
+- **`booking-service`** : 28 tests (20 unitaires + 8 intégration)
 - **`payment-service`** : 12 tests (7 unitaires + 5 intégration)
 - **`notification-service`** : 10 tests (5 unitaires + 5 intégration)
 
@@ -344,7 +344,14 @@ via variables de collection : création → réservation → paiement → annula
 mvn -pl class-service,booking-service,payment-service,notification-service -am test
 ```
 
-**Total** : **55 tests**, `BUILD SUCCESS`.
+**Total** : **68 tests**, `BUILD SUCCESS`.
+
+Les scénarios clés couverts côté `booking-service` (orchestrateur de la Saga) :
+- cycle de vie complet : réservation → paiement → annulation (places incrémentées /
+  décrémentées, paiement traité puis remboursé, **3 notifications** envoyées) ;
+- expiration des paiements par le scheduler (`shouldCancelExpiredBookings`) ;
+- surréservation → `409` ; paiement expiré → `409` ; annulation hors délai → `409` ;
+- envoi des notifications de confirmation / annulation et rappel J-24h.
 
 ---
 
@@ -360,7 +367,7 @@ mvn -pl class-service,booking-service,payment-service,notification-service -am t
 | Verrouillage optimiste | ✅ | `class-service` : `@Version` sur `FitnessClass` |
 | Scheduler (expiration paiements + rappels) | ✅ | `booking-service` : `BookingScheduler` (toutes les 5 min) |
 | Collection Postman complète | ✅ | `fitconnect.postman_collection.json` (18 requêtes) |
-| Tests unitaires + intégration | ✅ | 55 tests sur les 4 services |
+| Tests unitaires + intégration | ✅ | 68 tests sur les 4 services |
 | README détaillé | ✅ | Ce document (section Module 12) |
 | Docker Compose | ✅ | 11 services, build multi-stage, healthchecks |
 

@@ -7,6 +7,7 @@ import com.formation.booking.dto.BookingRequest;
 import com.formation.booking.dto.BookingResponse;
 import com.formation.booking.dto.ConfirmPaymentRequest;
 import com.formation.booking.dto.FitnessClassDto;
+import com.formation.booking.dto.NotificationRequestDto;
 import com.formation.booking.dto.PaymentDto;
 import com.formation.booking.exception.InvalidBookingOperationException;
 import com.formation.booking.exception.NoSpotsAvailableForBookingException;
@@ -19,6 +20,7 @@ import feign.FeignException;
 import feign.Request;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -234,5 +236,54 @@ class BookingServiceTest {
         service.expirePendingPayments();
 
         assertThat(expired.getStatus()).isEqualTo(BookingStatus.CANCELLED);
+    }
+
+    @Test
+    void create_envoieNotificationDeConfirmation() {
+        when(classClient.getById(1L)).thenReturn(cls(10, 5, "SCHEDULED"));
+        when(classClient.increment(1L, 2)).thenReturn(cls(10, 7, "SCHEDULED"));
+        when(repository.save(any(Booking.class))).thenAnswer(inv -> {
+            Booking b = inv.getArgument(0);
+            b.setId(1L);
+            return b;
+        });
+
+        service.create(req());
+
+        ArgumentCaptor<NotificationRequestDto> captor = ArgumentCaptor.forClass(NotificationRequestDto.class);
+        verify(notificationClient).send(captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo("BOOKING_CONFIRMATION");
+        assertThat(captor.getValue().userId()).isEqualTo(7L);
+    }
+
+    @Test
+    void cancel_envoieNotificationDAnnulation() {
+        when(repository.findById(1L)).thenReturn(Optional.of(
+                booking(BookingStatus.CONFIRMED, LocalDateTime.now().plusMinutes(30),
+                        LocalDateTime.now().plusDays(6))));
+        when(paymentClient.getByBooking(1L)).thenReturn(payment("SUCCESS"));
+        when(paymentClient.refund(1L)).thenReturn(payment("REFUNDED"));
+        when(classClient.decrement(1L, 2)).thenReturn(cls(10, 5, "SCHEDULED"));
+        when(repository.save(any(Booking.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        service.cancel(1L);
+
+        ArgumentCaptor<NotificationRequestDto> captor = ArgumentCaptor.forClass(NotificationRequestDto.class);
+        verify(notificationClient).send(captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo("BOOKING_CANCELLED");
+    }
+
+    @Test
+    void sendReminders_envoieNotificationsPourCoursDans24h() {
+        Booking upcoming = booking(BookingStatus.CONFIRMED, LocalDateTime.now().plusMinutes(30),
+                LocalDateTime.now().plusDays(6));
+        when(repository.findByStatusAndClassDateBetween(any(), any(LocalDateTime.class), any(LocalDateTime.class)))
+                .thenReturn(List.of(upcoming));
+
+        service.sendReminders();
+
+        ArgumentCaptor<NotificationRequestDto> captor = ArgumentCaptor.forClass(NotificationRequestDto.class);
+        verify(notificationClient).send(captor.capture());
+        assertThat(captor.getValue().type()).isEqualTo("BOOKING_REMINDER");
     }
 }
