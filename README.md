@@ -318,6 +318,10 @@ docker compose up --build
 docker compose ps   # attendre que tout soit "healthy"
 ```
 
+> ✅ **Vérification** — les 11 services sont opérationnels et **sains** (capture d'écran ci-dessous).
+
+![Conteneurs sains](conteneurs_healthy.png)
+
 ### Tester via la gateway (`http://localhost:8080`)
 Les scénarios sont regroupés dans `fitconnect.http` (client REST) **et** dans la
 **collection Postman** `fitconnect.postman_collection.json` (18 requêtes chaînées
