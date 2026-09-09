@@ -21,6 +21,8 @@ import com.formation.booking.model.BookingStatus;
 import com.formation.booking.repository.BookingRepository;
 import com.formation.booking.util.ReferenceGenerator;
 import feign.FeignException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -41,6 +43,8 @@ import java.util.List;
  */
 @Service
 public class BookingService {
+
+    private static final Logger log = LoggerFactory.getLogger(BookingService.class);
 
     private final BookingRepository repository;
     private final ClassClient classClient;
@@ -249,6 +253,10 @@ public class BookingService {
         } catch (FeignException.NotFound ex) {
             throw new InvalidBookingOperationException("Le cours " + classId + " n'existe pas");
         } catch (FeignException ex) {
+            log.error("Feign [] echec getClass [{}] status={} url={} msg={}",
+                    classClient.getClass().getSimpleName(), classId, ex.status(),
+                    ex.request() != null ? ex.request().url() : "?",
+                    ex.getMessage());
             throw new BookingServiceUnavailableException("class-service indisponible");
         }
     }
@@ -259,6 +267,10 @@ public class BookingService {
         } catch (FeignException.Conflict ex) {
             throw new NoSpotsAvailableForBookingException(classId);
         } catch (FeignException ex) {
+            log.error("Feign [] echec increment [{}] spots={} status={} url={} msg={}",
+                    classClient.getClass().getSimpleName(), classId, spots, ex.status(),
+                    ex.request() != null ? ex.request().url() : "?",
+                    ex.getMessage());
             throw new BookingServiceUnavailableException("class-service indisponible");
         }
     }

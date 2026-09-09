@@ -1,6 +1,7 @@
-# Eviter de copier les artefacts de build et fichiers inutiles dans le contexte Docker
-target/
-**/target/
+# Eviter de copier les artefacts de build inutiles, MAIS garder les jars
+# pre-compiles (utilises par les Dockerfiles des modules 12).
+**/target/**
+!**/target/*.jar
 .git/
 .gitignore
 *.iml

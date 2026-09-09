@@ -144,6 +144,7 @@ services:
     environment:
       SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8761/eureka/"
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
     depends_on:
       config-server:
         condition: service_healthy
@@ -166,6 +167,7 @@ services:
     environment:
       SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8761/eureka/"
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
     depends_on:
       config-server:
         condition: service_healthy
@@ -188,6 +190,7 @@ services:
     environment:
       SPRING_CONFIG_IMPORT: "optional:configserver:http://config-server:8888"
       EUREKA_CLIENT_SERVICEURL_DEFAULTZONE: "http://eureka-server:8761/eureka/"
+      EUREKA_INSTANCE_PREFER_IP_ADDRESS: "true"
     depends_on:
       config-server:
         condition: service_healthy
@@ -213,6 +216,8 @@ services:
       LOGGING_LEVEL_FEIGN: DEBUG
       LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_CLOUD_LOADBALANCER: DEBUG
       LOGGING_LEVEL_COM_NETFIX_DISCOVERY: DEBUG
+      FEIGN_CLIENT_CONFIG_DEFAULT_LOGGERLEVEL: full
+      LOGGING_LEVEL_COM_FORMATION_BOOKING_CLIENT: DEBUG
     depends_on:
       config-server:
         condition: service_healthy
